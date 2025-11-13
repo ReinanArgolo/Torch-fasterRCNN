@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Callable, Optional
 
 import torch
 from torch.utils.data import Dataset
@@ -27,10 +27,12 @@ class COCODetectionDataset(Dataset):
         images_dir: str,
         annotation_json: str,
         transforms: Any | None = None,
+        sample_transforms: Optional[Callable[[Image.Image, Dict[str, torch.Tensor]], Tuple[Image.Image, Dict[str, torch.Tensor]]]] = None,
     ) -> None:
         super().__init__()
         self.images_dir = images_dir
         self.transforms = transforms
+        self.sample_transforms = sample_transforms
         self.coco = COCO(annotation_json)
         self.image_ids = list(sorted(self.coco.getImgIds()))
 
@@ -73,6 +75,10 @@ class COCODetectionDataset(Dataset):
             "area": area_tensor,
             "iscrowd": iscrowd_tensor,
         }
+
+        # Apply paired image+target transforms (e.g., resize that also scales bboxes)
+        if self.sample_transforms is not None:
+            img, target = self.sample_transforms(img, target)
 
         if self.transforms is not None:
             img = self.transforms(img)

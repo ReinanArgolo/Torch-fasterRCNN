@@ -13,6 +13,7 @@ from tqdm import tqdm
 from dataset import COCODetectionDataset, collate_fn
 from utils import AverageMeter, build_optimizer, build_scheduler, save_checkpoint, set_seed, format_time
 from coco_eval import compute_coco_map
+from transforms import build_sample_transform
 
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -128,8 +129,12 @@ def main():
     set_seed(seed)
 
     # Datasets and loaders
-    train_ds = COCODetectionDataset(train_images, train_ann)
-    val_ds = COCODetectionDataset(val_images, val_ann) if val_images and val_ann and os.path.exists(val_ann) else None
+    # Build paired transforms (e.g., resize with bbox scaling)
+    sample_tf_cfg = train_cfg.get("transforms", {})
+    sample_transform = build_sample_transform(sample_tf_cfg)
+
+    train_ds = COCODetectionDataset(train_images, train_ann, sample_transforms=sample_transform)
+    val_ds = COCODetectionDataset(val_images, val_ann, sample_transforms=sample_transform) if val_images and val_ann and os.path.exists(val_ann) else None
 
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, collate_fn=collate_fn)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, collate_fn=collate_fn) if val_ds else None
