@@ -21,6 +21,7 @@ training:
   num_workers: 4
   seed: 42
   amp: true
+  eval_map_every: 1  # compute COCO mAP every N epochs (0 to disable)
 
 # Model
 model:
@@ -34,3 +35,11 @@ output:
   experiment: "fasterrcnn_cli"
   save_every: 1
   resume: null  # path to checkpoint to resume from
+
+# Early stopping to avoid overfitting
+early_stopping:
+  enabled: true
+  monitor: "val_loss"   # or "map"
+  mode: "min"           # "min" for val_loss, "max" for map
+  min_delta: 0.0
+  patience: 3

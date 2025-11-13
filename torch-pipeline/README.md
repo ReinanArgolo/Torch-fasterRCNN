@@ -43,6 +43,37 @@ Optional flags override config values:
 
 Checkpoints are saved under `outputs/<experiment>/epoch_*.pth`.
 
+## Early stopping (anti-overfitting)
+
+Configure in `config.yaml`:
+
+```
+early_stopping:
+	enabled: true
+	monitor: val_loss   # or "map"
+	mode: min           # "min" for loss, "max" for mAP
+	min_delta: 0.0
+	patience: 3
+```
+
+If you monitor `map`, set `training.eval_map_every` to how often to compute COCO mAP during training (default 0 = off).
+
+## Evaluate COCO mAP
+
+```
+python torch-pipeline/eval_coco.py --config torch-pipeline/config.yaml \
+	--checkpoint outputs/<experiment>/epoch_10.pth --score-thresh 0.05
+```
+
+## Inference (predições)
+
+```
+python torch-pipeline/infer.py --images new_whales_rcnn/images/Test/test \
+	--checkpoint outputs/<experiment>/epoch_10.pth \
+	--num-classes 2 --score-thresh 0.5 --model fasterrcnn_resnet50_fpn_v2 \
+	--out outputs/preds_test.json
+```
+
 ## Config notes
 
 - `project_root`: Base path to resolve all relative paths.
@@ -57,3 +88,4 @@ Pass `--resume /path/to/checkpoint.pth` or set `output.resume` in config.
 ## Inference
 
 This repo focuses on training; add an `infer.py` later if needed to export detections.
+Now included: `infer.py` and `eval_coco.py`.
