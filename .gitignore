@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# Outputs and checkpoints
+outputs/
+*.pth
+*.pt
+
+# Datasets (keep annotations but ignore raw images by default)
+new_whales_rcnn/images/
+!new_whales_rcnn/annotations/**
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# OS/editor files
+.DS_Store
+.vscode/
