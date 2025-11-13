@@ -57,16 +57,27 @@ class COCODetectionDataset(Dataset):
 
         for a in anns:
             x, y, w, h = a["bbox"]
+            # skip invalid/empty boxes
+            if w <= 0 or h <= 0:
+                continue
             # Convert to [x1, y1, x2, y2]
-            boxes.append([x, y, x + w, y + h])
+            x1, y1, x2, y2 = x, y, x + w, y + h
+            boxes.append([x1, y1, x2, y2])
             labels.append(a.get("category_id", 1))
             areas.append(float(a.get("area", w * h)))
             iscrowd.append(int(a.get("iscrowd", 0)))
 
-        boxes_tensor = torch.as_tensor(boxes, dtype=torch.float32)
-        labels_tensor = torch.as_tensor(labels, dtype=torch.int64)
-        area_tensor = torch.as_tensor(areas, dtype=torch.float32)
-        iscrowd_tensor = torch.as_tensor(iscrowd, dtype=torch.uint8)
+        # Ensure tensors have correct shapes even when there are no annotations
+        if len(boxes) == 0:
+            boxes_tensor = torch.zeros((0, 4), dtype=torch.float32)
+            labels_tensor = torch.zeros((0,), dtype=torch.int64)
+            area_tensor = torch.zeros((0,), dtype=torch.float32)
+            iscrowd_tensor = torch.zeros((0,), dtype=torch.uint8)
+        else:
+            boxes_tensor = torch.as_tensor(boxes, dtype=torch.float32).reshape(-1, 4)
+            labels_tensor = torch.as_tensor(labels, dtype=torch.int64)
+            area_tensor = torch.as_tensor(areas, dtype=torch.float32)
+            iscrowd_tensor = torch.as_tensor(iscrowd, dtype=torch.uint8)
 
         target: Dict[str, torch.Tensor] = {
             "boxes": boxes_tensor,

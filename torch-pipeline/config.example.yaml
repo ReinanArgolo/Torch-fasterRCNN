@@ -30,7 +30,7 @@ training:
 # Model
 model:
   name: "fasterrcnn_resnet50_fpn_v2"
-  pretrained: true
+  pretrained: no
   num_classes: 2  # background + whale
 
 # Checkpointing / logging

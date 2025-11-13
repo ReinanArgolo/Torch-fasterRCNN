@@ -48,7 +48,7 @@ def train_one_epoch(model, loader, optimizer, epoch: int, scaler: Optional[torch
 
         optimizer.zero_grad(set_to_none=True)
         if scaler is not None:
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast("cuda"):
                 losses: Dict[str, torch.Tensor] = model(images, targets)
                 loss = sum(losses.values())
             scaler.scale(loss).backward()
@@ -149,7 +149,7 @@ def main():
     optimizer = build_optimizer(params, lr=lr, momentum=float(train_cfg.get("momentum", 0.9)), weight_decay=float(train_cfg.get("weight_decay", 5e-4)))
     scheduler = build_scheduler(optimizer, step_size=int(train_cfg.get("lr_step_size", 3)), gamma=float(train_cfg.get("lr_gamma", 0.1)))
 
-    scaler = torch.cuda.amp.GradScaler() if amp else None
+    scaler = torch.amp.GradScaler("cuda") if amp else None
 
     start_epoch = 1
     best_val = float("inf")
