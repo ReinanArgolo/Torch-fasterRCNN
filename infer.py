@@ -13,12 +13,14 @@ from tqdm import tqdm
 
 from dataset import COCODetectionDataset, collate_fn
 from train import get_model, DEVICE
+from transforms import ResizeShortSide
 
 
 class ImageFolderDataset(Dataset):
-    def __init__(self, images_dir: str):
+    def __init__(self, images_dir: str, sample_transform: ResizeShortSide | None = None):
         self.images_dir = images_dir
         self.files = [f for f in sorted(os.listdir(images_dir)) if f.lower().endswith((".jpg", ".jpeg", ".png"))]
+        self.sample_transform = sample_transform
 
     def __len__(self):
         return len(self.files)
@@ -28,9 +30,11 @@ class ImageFolderDataset(Dataset):
         path = os.path.join(self.images_dir, file_name)
         img = Image.open(path).convert("RGB")
         # To tensor [0,1]
+        target = {"image_id": torch.tensor([idx], dtype=torch.int64)}
+        if self.sample_transform is not None:
+            img, target = self.sample_transform(img, target)
         tensor = torchvision.transforms.functional.to_tensor(img)
         # Use index as image_id for consistency in outputs; file mapping saved separately
-        target = {"image_id": torch.tensor([idx], dtype=torch.int64)}
         return tensor, target
 
 
@@ -42,9 +46,15 @@ def main():
     parser.add_argument("--model", type=str, default="fasterrcnn_resnet50_fpn_v2")
     parser.add_argument("--score-thresh", type=float, default=0.5)
     parser.add_argument("--out", type=str, default=None, help="Path to save results JSON")
+    parser.add_argument("--resize-min", type=int, default=None, help="Optional: resize shorter side to this value (keep aspect)")
+    parser.add_argument("--resize-max", type=int, default=None, help="Optional: do not exceed this longer side after resize")
     args = parser.parse_args()
 
-    ds = ImageFolderDataset(args.images)
+    sample_transform = None
+    if args.resize_min is not None:
+        sample_transform = ResizeShortSide(min_size=int(args.resize_min), max_size=int(args.resize_max or 1333))
+
+    ds = ImageFolderDataset(args.images, sample_transform=sample_transform)
     loader = DataLoader(ds, batch_size=1, shuffle=False, collate_fn=collate_fn, num_workers=2)
 
     model = get_model(args.model, num_classes=args.num_classes, pretrained=False)

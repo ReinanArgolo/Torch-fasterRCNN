@@ -43,6 +43,20 @@ Optional flags override config values:
 
 Checkpoints are saved under `outputs/<experiment>/epoch_*.pth`.
 
+### Redimensionamento (com ajuste de bbox)
+
+No `config.yaml` você pode habilitar redimensionamento mantendo aspecto e ajustando as bounding boxes:
+
+```
+training:
+	transforms:
+		resize:
+			min_size: 800   # lado menor
+			max_size: 1333  # limite do lado maior
+```
+
+O mesmo transform é aplicado em treino e validação.
+
 ## Early stopping (anti-overfitting)
 
 Configure in `config.yaml`:
@@ -72,6 +86,14 @@ python torch-pipeline/infer.py --images new_whales_rcnn/images/Test/test \
 	--checkpoint outputs/<experiment>/epoch_10.pth \
 	--num-classes 2 --score-thresh 0.5 --model fasterrcnn_resnet50_fpn_v2 \
 	--out outputs/preds_test.json
+```
+
+Para redimensionar na inferência (com ajuste de bbox):
+
+```
+python torch-pipeline/infer.py --images new_whales_rcnn/images/Test/test \
+	--checkpoint outputs/<experiment>/epoch_10.pth --num-classes 2 \
+	--resize-min 800 --resize-max 1333 --out outputs/preds_resized.json
 ```
 
 ## Config notes
