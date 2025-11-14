@@ -21,6 +21,8 @@ training:
   num_workers: 4
   seed: 42
   amp: true
+  sample_vis_count: 4
+  sample_vis_thresh: 0.1
   eval_map_every: 1  # compute COCO mAP every N epochs (0 to disable)
   transforms:
     resize:
@@ -30,15 +32,15 @@ training:
 # Model
 model:
   name: "fasterrcnn_resnet50_fpn_v2"
-  pretrained: true
+  pretrained: yes
   num_classes: 2  # background + whale
 
 # Checkpointing / logging
 output:
   dir: "outputs"
-  experiment: "fasterrcnn_cli"
+  experiment: "fasterrcnn_test"
   save_every: 1
-  resume: null  # path to checkpoint to resume from
+  resume: "resume"  # path to checkpoint to resume from
 
 # Early stopping to avoid overfitting
 early_stopping:

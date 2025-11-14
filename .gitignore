@@ -20,3 +20,13 @@ new_whales_rcnn/images/
 # OS/editor files
 .DS_Store
 .vscode/
+
+# Ignore training artifacts and local env
+*.pth
+outputs/
+*.zip
+new_whales_rcnn/
+.venv/
+venv/
+__pycache__/
+.vscode/
