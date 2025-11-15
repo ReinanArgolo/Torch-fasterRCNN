@@ -47,6 +47,12 @@ def build_sample_transform(cfg: Dict[str, Any]):
     use_iou_crop = bool(cfg.get("use_iou_crop", False))
     min_iou = float(cfg.get("min_iou", 0.3))  # se habilitar IoU crop
 
+    # Monta o operador de resize com compatibilidade de versão
+    try:
+        resize_op = T.RandomResize(short_sizes, max_size=max_size, antialias=True)  # versões mais novas
+    except TypeError:
+        resize_op = T.RandomResize(short_sizes, max_size=max_size)  # versões que não suportam 'antialias'
+
     aug = [
         # Garante tipos corretos
         T.ToImage(),                         # PIL/numpy -> Tensor [C,H,W]
@@ -59,8 +65,7 @@ def build_sample_transform(cfg: Dict[str, Any]):
             saturation=cj_cfg.get("saturation", 0.2),
             hue=cj_cfg.get("hue", 0.02),
         )], p=cj_p),
-        # Multi-scale training
-        T.RandomResize(sizes=short_sizes, max_size=max_size, antialias=True),
+        resize_op,  # <-- aqui
     ]
 
     if use_iou_crop:
