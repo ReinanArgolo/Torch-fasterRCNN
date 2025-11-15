@@ -30,18 +30,23 @@ def _wrap_tv_tensors(img, target: Dict[str, Any]) -> Tuple[TvImage | torch.Tenso
 
     target = dict(target)
     if boxes is not None and not isinstance(boxes, TvBoxes):
+        # garanta tensor float32
+        boxes_t = torch.as_tensor(boxes, dtype=torch.float32)
         canvas_size = (h, w) if (h is not None and w is not None) else None
-        target["boxes"] = TvBoxes(boxes, format="XYXY", canvas_size=canvas_size)
+        target["boxes"] = TvBoxes(boxes_t, format="XYXY", canvas_size=canvas_size)
     elif isinstance(boxes, TvBoxes) and boxes.canvas_size is None and h is not None and w is not None:
         # garante canvas_size se veio faltando
-        target["boxes"] = TvBoxes(boxes.as_tensor(), format="XYXY", canvas_size=(h, w))
+        target["boxes"] = TvBoxes(boxes.as_tensor() if hasattr(boxes, "as_tensor") else torch.as_tensor(boxes),
+                                  format="XYXY", canvas_size=(h, w))
     return img, target
 
 
 def _unwrap_tv_tensors(img: torch.Tensor, target: Dict[str, Any]) -> Tuple[torch.Tensor, Dict[str, Any]]:
     target = dict(target)
-    if isinstance(target.get("boxes", None), TvBoxes):
-        target["boxes"] = target["boxes"].as_tensor()
+    b = target.get("boxes", None)
+    if isinstance(b, TvBoxes):
+        # Converte explicitamente para torch.Tensor "puro" (drop do wrapper)
+        target["boxes"] = torch.tensor(b.detach().to(torch.float32))
     return img, target
 
 
