@@ -36,7 +36,6 @@ class ResizeShortSide:
         new_h = int(round(h * scale))
         img2 = _resize_pil(img, new_w, new_h)
 
-        # Scale boxes [x1,y1,x2,y2]
         t2 = dict(target)
         if "boxes" in target and target["boxes"].numel() > 0:
             boxes = target["boxes"].clone()
@@ -44,10 +43,22 @@ class ResizeShortSide:
             # clip
             boxes[:, 0::2].clamp_(min=0, max=new_w - 1)
             boxes[:, 1::2].clamp_(min=0, max=new_h - 1)
-            t2["boxes"] = boxes
-        # scale area if present
-        if "area" in target:
-            t2["area"] = target["area"] * (scale ** 2)
+
+            w = boxes[:, 2] - boxes[:, 0]
+            h = boxes[:, 3] - boxes[:, 1]
+            keep = (w > 0) & (h > 0)
+
+            t2["boxes"] = boxes[keep]
+            if "labels" in t2:
+                t2["labels"] = t2["labels"][keep]
+            if "iscrowd" in t2:
+                t2["iscrowd"] = t2["iscrowd"][keep]
+            if "area" in t2:
+                t2["area"] = t2["area"][keep] * (scale**2)
+        elif "area" in target:
+            # no boxes, but has area
+            t2["area"] = target["area"] * (scale**2)
+
         return img2, t2
 
 
