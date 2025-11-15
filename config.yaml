@@ -3,30 +3,20 @@
 project_root: "."
 data:
   images:
-    train_dir: "new_whales_rcnn/images/Train"
-    val_dir: "new_whales_rcnn/images/Validation"
-    test: "new_whales_rcnn/images/test"
+    train_dir: "datasets/images/Train"
+    val_dir: "datasets/images/Validation"
+    test: "datasets/images/test"
   annotations:
-    train_json: "new_whales_rcnn/annotations/instances_Train.json"
-    val_json: "new_whales_rcnn/annotations/instances_Validation.json"
-    test_json: "new_whales_rcnn/annotations/test"
+    train_json: "datasets/annotations/instances_Train.json"
+    val_json: "datasets/annotations/instances_Validation.json"
+    test_json: "datasets/annotations/test"
 
 
 # Training
 training:
-  epochs: 30
+  epochs: 5
   batch_size: 2
-  lr: 0.002
-  momentum: 0.9
-  weight_decay: 0.0005
-  lr_step_size: 10
-  lr_gamma: 0.5
-  num_workers: 1
-  seed: 42
-  amp: true
-  sample_vis_count: 4
-  sample_vis_thresh: 0.1
-  eval_map_every: 1  # compute COCO mAP every N epochs (0 to disable)
+  lr: 0.005
   transforms:
     resize:
       min_size: 800
@@ -35,7 +25,6 @@ training:
     # Multiscale mais alto para preservar detalhe (objetos pequenos/distantes)
     short_sizes: [800, 896, 1024]
     max_size: 1600
-    # Interferências (água/reflexo/espuma): jitter um pouco mais forte
     color_jitter: { p: 0.7, brightness: 0.25, contrast: 0.25, saturation: 0.25, hue: 0.03 }
     use_iou_crop: false
     min_iou: 0.3
