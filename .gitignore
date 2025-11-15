@@ -30,5 +30,4 @@ new_whales_rcnn/
 venv/
 __pycache__/
 .vscode/
-/images
-/annotations
+/datasets
