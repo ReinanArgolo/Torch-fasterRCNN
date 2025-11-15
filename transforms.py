@@ -11,14 +11,12 @@ from torchvision.tv_tensors import Image as TvImage, BoundingBoxes as TvBoxes
 def _wrap_tv_tensors(img: torch.Tensor, target: Dict[str, Any]) -> Tuple[TvImage, Dict[str, Any]]:
     # img -> tv_tensors.Image, boxes -> tv_tensors.BoundingBoxes (XYXY)
     if not isinstance(img, torch.Tensor):
-        # Se vier como PIL, ToImage no pipeline cuidará depois
         pass
     boxes = target.get("boxes", None)
     h = img.shape[-2] if isinstance(img, torch.Tensor) else target.get("height", None)
     w = img.shape[-1] if isinstance(img, torch.Tensor) else target.get("width", None)
 
-    # O pipeline v2 aceita tanto PIL quanto Tensor; garantimos tipos dos boxes
-    target = dict(target)  # evitar mutação
+    target = dict(target)
     if boxes is not None and not isinstance(boxes, TvBoxes):
         canvas_size = (h, w) if (h is not None and w is not None) else None
         target["boxes"] = TvBoxes(boxes, format="XYXY", canvas_size=canvas_size)
@@ -26,17 +24,32 @@ def _wrap_tv_tensors(img: torch.Tensor, target: Dict[str, Any]) -> Tuple[TvImage
 
 
 def _unwrap_tv_tensors(img: torch.Tensor, target: Dict[str, Any]) -> Tuple[torch.Tensor, Dict[str, Any]]:
-    # Converte tv_tensors de volta para tensores "puros" onde necessário
     target = dict(target)
     if isinstance(target.get("boxes", None), TvBoxes):
         target["boxes"] = target["boxes"].as_tensor()
     return img, target
 
 
-def build_sample_transform(cfg: Dict[str, Any]):
+def _make_multiscale_resize(short_sizes, max_size):
+    # Escolhe aleatoriamente um tamanho curto e aplica Resize mantendo aspecto
+    choices = []
+    for s in short_sizes:
+        s = int(s)
+        op = None
+        # Tenta a API moderna: Resize(size=(s,), max_size=..., antialias=...)
+        try:
+            op = T.Resize(size=(s,), max_size=max_size, antialias=True)
+        except TypeError:
+            try:
+                op = T.Resize(size=(s,), max_size=max_size)
+            except TypeError:
+                # Último recurso: Resize(s) (pode não preservar max_size em versões antigas)
+                op = T.Resize(size=s)
+        choices.append(op)
+    return T.RandomChoice(choices)
 
-    # Config com defaults sensatos para detecção
-    # Pode ser controlado via YAML em training.transforms
+
+def build_sample_transform(cfg: Dict[str, Any]):
     short_sizes = cfg.get("short_sizes", [640, 672, 704, 736, 768, 800])
     max_size = int(cfg.get("max_size", 1333))
     hflip_p = float(cfg.get("hflip_p", 0.5))
@@ -45,19 +58,13 @@ def build_sample_transform(cfg: Dict[str, Any]):
     cj_p = float(cj_cfg.get("p", 0.5))
 
     use_iou_crop = bool(cfg.get("use_iou_crop", False))
-    min_iou = float(cfg.get("min_iou", 0.3))  # se habilitar IoU crop
+    min_iou = float(cfg.get("min_iou", 0.3))
 
-    # Monta o operador de resize com compatibilidade de versão
-    try:
-        resize_op = T.RandomResize(short_sizes, max_size=max_size, antialias=True)  # versões mais novas
-    except TypeError:
-        resize_op = T.RandomResize(short_sizes, max_size=max_size)  # versões que não suportam 'antialias'
+    resize_op = _make_multiscale_resize(short_sizes, max_size)
 
     aug = [
-        # Garante tipos corretos
-        T.ToImage(),                         # PIL/numpy -> Tensor [C,H,W]
-        T.ConvertImageDtype(torch.float32),  # float32 em [0,1]
-        # Augs
+        T.ToImage(),
+        T.ConvertImageDtype(torch.float32),
         T.RandomHorizontalFlip(p=hflip_p),
         T.RandomApply([T.ColorJitter(
             brightness=cj_cfg.get("brightness", 0.2),
@@ -65,12 +72,10 @@ def build_sample_transform(cfg: Dict[str, Any]):
             saturation=cj_cfg.get("saturation", 0.2),
             hue=cj_cfg.get("hue", 0.02),
         )], p=cj_p),
-        resize_op,  # <-- aqui
+        resize_op,
     ]
 
     if use_iou_crop:
-        # Recorte que preserva objetos com certo IoU com a janela
-        # sampler_options recebe uma lista de IoUs alvo; usamos um único valor
         aug.insert(3, T.RandomIoUCrop(sampler_options=[min_iou]))
 
     pipeline = T.Compose(aug)
