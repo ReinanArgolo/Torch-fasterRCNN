@@ -9,45 +9,48 @@ from torchvision.tv_tensors import Image as TvImage, BoundingBoxes as TvBoxes
 
 
 def _infer_hw(img) -> Tuple[int, int] | Tuple[None, None]:
-    # Retorna (h, w) ou (None, None) se não conseguir
     if isinstance(img, torch.Tensor):
         return int(img.shape[-2]), int(img.shape[-1])
-    # PIL.Image é um módulo; a classe é PILImage.Image
     if isinstance(img, PILImage.Image):
         return int(img.height), int(img.width)
-    if isinstance(img, np.ndarray):
-        if img.ndim >= 2:
-            return int(img.shape[0]), int(img.shape[1])
+    if isinstance(img, np.ndarray) and img.ndim >= 2:
+        return int(img.shape[0]), int(img.shape[1])
     if isinstance(img, TvImage):
         return int(img.shape[-2]), int(img.shape[-1])
     return None, None
 
 
-def _wrap_tv_tensors(img, target: Dict[str, Any]) -> Tuple[TvImage | torch.Tensor, Dict[str, Any]]:
-    # boxes -> tv_tensors.BoundingBoxes (XYXY) com canvas_size sempre definido
+def _wrap_tv_tensors(img, target: Dict[str, Any]):
     boxes = target.get("boxes", None)
     h, w = _infer_hw(img)
-
     target = dict(target)
     if boxes is not None and not isinstance(boxes, TvBoxes):
-        # garanta tensor float32
         boxes_t = torch.as_tensor(boxes, dtype=torch.float32)
         canvas_size = (h, w) if (h is not None and w is not None) else None
         target["boxes"] = TvBoxes(boxes_t, format="XYXY", canvas_size=canvas_size)
     elif isinstance(boxes, TvBoxes) and boxes.canvas_size is None and h is not None and w is not None:
-        # garante canvas_size se veio faltando
-        target["boxes"] = TvBoxes(boxes.as_tensor() if hasattr(boxes, "as_tensor") else torch.as_tensor(boxes),
-                                  format="XYXY", canvas_size=(h, w))
+        target["boxes"] = TvBoxes(torch.as_tensor(boxes, dtype=torch.float32), format="XYXY", canvas_size=(h, w))
     return img, target
 
 
-def _unwrap_tv_tensors(img: torch.Tensor, target: Dict[str, Any]) -> Tuple[torch.Tensor, Dict[str, Any]]:
-    target = dict(target)
-    b = target.get("boxes", None)
-    if isinstance(b, TvBoxes):
-        # Converte explicitamente para torch.Tensor "puro" (drop do wrapper)
-        target["boxes"] = torch.tensor(b.detach().to(torch.float32))
-    return img, target
+def _ensure_chw_float(img: torch.Tensor) -> torch.Tensor:
+    # Converte para float32 e reordena para CHW se vier HWC
+    x = img.detach().to(torch.float32)
+    if x.ndim == 3 and x.shape[0] not in (1, 3) and x.shape[-1] in (1, 3):
+        x = x.permute(2, 0, 1).contiguous()
+    return x
+
+
+def _unwrap_tv_tensors(img, target: Dict[str, Any]):
+    # Apenas garante imagem como Tensor CHW float32; não converte boxes (TvBoxes funciona no modelo)
+    if isinstance(img, (TvImage, torch.Tensor, np.ndarray)):
+        img_t = torch.as_tensor(img, dtype=torch.float32) if not isinstance(img, torch.Tensor) else img
+    elif isinstance(img, PILImage.Image):
+        img_t = torch.from_numpy(np.array(img))
+    else:
+        img_t = torch.as_tensor(img, dtype=torch.float32)
+    img_t = _ensure_chw_float(img_t)
+    return img_t, dict(target)
 
 
 def _make_multiscale_resize(short_sizes, max_size):
@@ -80,7 +83,7 @@ def build_sample_transform(cfg: Dict[str, Any]):
     resize_op = _make_multiscale_resize(short_sizes, max_size)
 
     aug = [
-        T.ToImage(),
+        T.ToImage(),                         # PIL/ndarray -> Tensor (não garante CHW se já for Tensor)
         T.ConvertImageDtype(torch.float32),
         T.RandomHorizontalFlip(p=hflip_p),
         T.RandomApply([T.ColorJitter(
@@ -91,7 +94,6 @@ def build_sample_transform(cfg: Dict[str, Any]):
         )], p=cj_p),
         resize_op,
     ]
-
     if use_iou_crop:
         aug.insert(3, T.RandomIoUCrop(sampler_options=[min_iou]))
 
@@ -100,7 +102,7 @@ def build_sample_transform(cfg: Dict[str, Any]):
     def transform(img, target):
         img, target = _wrap_tv_tensors(img, target)
         img, target = pipeline(img, target)
-        img, target = _unwrap_tv_tensors(img, target)
+        img, target = _unwrap_tv_tensors(img, target)  # garante CHW float32
         return img, target
 
     return transform
