@@ -58,13 +58,20 @@ class COCODetectionDataset(Dataset):
         self.image_ids = resolved_ids
 
     def _resolve_filename(self, file_name: str) -> Optional[str]:
-        # Exact match
+        # If annotation stores subdirectory (e.g. "val/DSC123.jpg") but images_dir already points to that subdirectory,
+        # use basename for matching.
+        # Try exact path first.
         exact_path = os.path.join(self.images_dir, file_name)
         if os.path.exists(exact_path):
             return exact_path
 
+        base_name = os.path.basename(file_name)
+        base_exact = os.path.join(self.images_dir, base_name)
+        if os.path.exists(base_exact):
+            return base_exact
+
         # Case-insensitive exact match
-        lower = file_name.lower()
+        lower = base_name.lower()
         if lower in self._dir_set_lower:
             # find the original cased filename
             for f in self._dir_files:
@@ -72,7 +79,7 @@ class COCODetectionDataset(Dataset):
                     return os.path.join(self.images_dir, f)
 
         # Prefix match: handle cases like 'quadro_0000.jpg' vs 'quadro_0000_abcdef.jpg'
-        base, ext = os.path.splitext(file_name)
+        base, ext = os.path.splitext(base_name)
         candidates = [f for f in self._dir_files if f.startswith(base + "_") and f.lower().endswith(ext.lower())]
         if len(candidates) == 1:
             return os.path.join(self.images_dir, candidates[0])

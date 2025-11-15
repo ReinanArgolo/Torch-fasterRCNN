@@ -78,9 +78,11 @@ def main():
 
     set_seed(seed)
 
-    sample_transform = build_sample_transform(train_cfg.get("transforms", {}))
-    train_ds = COCODetectionDataset(train_images, train_ann, sample_transforms=sample_transform)
-    val_ds = COCODetectionDataset(val_images, val_ann, sample_transforms=sample_transform) if val_images and val_ann and os.path.exists(val_ann) else None
+    # Use resize/augment only for training. For validation, keep original scale so COCO eval matches GT coordinates.
+    train_sample_transform = build_sample_transform(train_cfg.get("transforms", {}))
+    val_sample_transform = None
+    train_ds = COCODetectionDataset(train_images, train_ann, sample_transforms=train_sample_transform)
+    val_ds = COCODetectionDataset(val_images, val_ann, sample_transforms=val_sample_transform) if val_images and val_ann and os.path.exists(val_ann) else None
 
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, collate_fn=collate_fn)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, collate_fn=collate_fn) if val_ds else None

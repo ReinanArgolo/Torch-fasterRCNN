@@ -4,10 +4,13 @@ project_root: "."
 data:
   images:
     train_dir: "new_whales_rcnn/images/Train"
-    val_dir: "new_whales_rcnn/images/Validation/val"
+    val_dir: "new_whales_rcnn/images/Validation"
+    test: "new_whales_rcnn/images/test"
   annotations:
     train_json: "new_whales_rcnn/annotations/instances_Train.json"
     val_json: "new_whales_rcnn/annotations/instances_Validation.json"
+    test_json: "new_whales_rcnn/annotations/test"
+
 
 # Training
 training:
@@ -18,7 +21,7 @@ training:
   weight_decay: 0.0005
   lr_step_size: 3
   lr_gamma: 0.1
-  num_workers: 4
+  num_workers: 1
   seed: 42
   amp: true
   sample_vis_count: 4
@@ -48,6 +51,7 @@ early_stopping:
   # monitor: choose metric to monitor. Recommended: 'val_loss' (default) or 'val_mAP'.
   # The Trainer will also accept legacy names like 'map' or 'mAP' and map them to 'val_mAP'.
   monitor: "val_loss"
+  eval_map_every: 1
   # mode is auto-detected from monitor: 'min' for losses, 'max' for mAP-like metrics
   # If you explicitly want to override, set mode: 'min' or 'max'
   mode: null

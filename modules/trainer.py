@@ -160,11 +160,17 @@ class Trainer:
             if val_loader is not None:
                 val_loss = self._evaluate_loss(val_loader)
                 if self.eval_map_every > 0 and (epoch % self.eval_map_every) == 0:
+                    # Compute COCO mAP on validation set (AP@[.5:.95])
                     self.model.eval()
                     with torch.no_grad():
-                        map_stats = compute_coco_map(self.model, val_loader, device=self.device)
-                    val_map = map_stats.get("bbox_mAP") or map_stats.get("mAP") or map_stats.get("map") or None
-                    print(f"[Epoch {epoch}] mAP: {val_map}")
+                        # compute_coco_map returns a tuple (AP, AP50, AP75)
+                        try:
+                            ap, ap50, ap75 = compute_coco_map(self.model, val_loader, val_ds, device=self.device)
+                        except TypeError:
+                            # Backward-compat: older signature may not require dataset, try without it
+                            ap, ap50, ap75 = compute_coco_map(self.model, val_loader, device=self.device)  # type: ignore
+                    val_map = float(ap)
+                    print(f"[Epoch {epoch}] mAP: {val_map:.4f} | AP50: {ap50:.4f} | AP75: {ap75:.4f}")
 
             hist_epochs.append(epoch)
             hist_train.append(train_loss)
@@ -214,7 +220,11 @@ class Trainer:
                 print(f"Checkpoint salvo: {ckpt_path}")
 
             stop = False
+            # Decide which metric to monitor
             monitor = self.es_cfg.get("monitor", "val_loss")
+            # If configured, prefer val_mAP automatically when available
+            if self.es_cfg.get("prefer_val_mAP", False) and self.eval_map_every > 0:
+                monitor = "val_mAP"
             # accept multiple monitor aliases; prefer val_mAP if configured
             monitor_alias = monitor
             if monitor_alias in ("map", "mAP"):
