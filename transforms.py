@@ -12,7 +12,8 @@ def _infer_hw(img) -> Tuple[int, int] | Tuple[None, None]:
     # Retorna (h, w) ou (None, None) se não conseguir
     if isinstance(img, torch.Tensor):
         return int(img.shape[-2]), int(img.shape[-1])
-    if isinstance(img, PILImage):
+    # PIL.Image é um módulo; a classe é PILImage.Image
+    if isinstance(img, PILImage.Image):
         return int(img.height), int(img.width)
     if isinstance(img, np.ndarray):
         if img.ndim >= 2:
