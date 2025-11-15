@@ -21,6 +21,7 @@ def _infer_hw(img) -> Tuple[int, int] | Tuple[None, None]:
 
 
 def _wrap_tv_tensors(img, target: Dict[str, Any]):
+    # Converte boxes para TvBoxes com canvas_size para suportar aug geométrica
     boxes = target.get("boxes", None)
     h, w = _infer_hw(img)
     target = dict(target)
@@ -34,23 +35,51 @@ def _wrap_tv_tensors(img, target: Dict[str, Any]):
 
 
 def _ensure_chw_float(img: torch.Tensor) -> torch.Tensor:
-    # Converte para float32 e reordena para CHW se vier HWC
+    # Converte para float32 e reordena para CHW se vier HWC, ou adiciona canal se vier HW
     x = img.detach().to(torch.float32)
-    if x.ndim == 3 and x.shape[0] not in (1, 3) and x.shape[-1] in (1, 3):
+    if x.ndim == 2:  # [H, W] -> [1, H, W]
+        x = x.unsqueeze(0)
+    elif x.ndim == 3 and x.shape[0] not in (1, 3, 4) and x.shape[-1] in (1, 3, 4):
+        # Provável HWC -> CHW
         x = x.permute(2, 0, 1).contiguous()
     return x
 
 
+def _ensure_rgb3(img: torch.Tensor) -> torch.Tensor:
+    # Garante 3 canais: repete cinza, remove alpha se RGBA
+    c = img.shape[0]
+    if c == 1:
+        img = img.repeat(3, 1, 1)
+    elif c == 4:
+        img = img[:3, ...]
+    return img
+
+
 def _unwrap_tv_tensors(img, target: Dict[str, Any]):
-    # Apenas garante imagem como Tensor CHW float32; não converte boxes (TvBoxes funciona no modelo)
-    if isinstance(img, (TvImage, torch.Tensor, np.ndarray)):
-        img_t = torch.as_tensor(img, dtype=torch.float32) if not isinstance(img, torch.Tensor) else img
+    # Converte imagem para Tensor CHW float32 RGB e boxes para Tensor Nx4 float
+    if isinstance(img, torch.Tensor):
+        img_t = img
+    elif isinstance(img, TvImage):
+        img_t = torch.as_tensor(img, dtype=torch.float32)
+    elif isinstance(img, np.ndarray):
+        img_t = torch.as_tensor(img)
     elif isinstance(img, PILImage.Image):
         img_t = torch.from_numpy(np.array(img))
     else:
-        img_t = torch.as_tensor(img, dtype=torch.float32)
+        img_t = torch.as_tensor(img)
+
     img_t = _ensure_chw_float(img_t)
-    return img_t, dict(target)
+    img_t = _ensure_rgb3(img_t)
+
+    tgt = dict(target)
+    b = tgt.get("boxes", None)
+    if isinstance(b, TvBoxes):
+        # para Tensor "puro"
+        tgt["boxes"] = b.detach().to(torch.float32).clone()
+    elif torch.is_tensor(b):
+        tgt["boxes"] = b.detach().to(torch.float32).clone()
+
+    return img_t, tgt
 
 
 def _make_multiscale_resize(short_sizes, max_size):
@@ -83,8 +112,8 @@ def build_sample_transform(cfg: Dict[str, Any]):
     resize_op = _make_multiscale_resize(short_sizes, max_size)
 
     aug = [
-        T.ToImage(),                         # PIL/ndarray -> Tensor (não garante CHW se já for Tensor)
-        T.ConvertImageDtype(torch.float32),
+        T.ToImage(),                         # PIL/ndarray -> Tensor CHW uint8
+        T.ConvertImageDtype(torch.float32),  # -> float32 [0,1]
         T.RandomHorizontalFlip(p=hflip_p),
         T.RandomApply([T.ColorJitter(
             brightness=cj_cfg.get("brightness", 0.2),
@@ -102,7 +131,7 @@ def build_sample_transform(cfg: Dict[str, Any]):
     def transform(img, target):
         img, target = _wrap_tv_tensors(img, target)
         img, target = pipeline(img, target)
-        img, target = _unwrap_tv_tensors(img, target)  # garante CHW float32
+        img, target = _unwrap_tv_tensors(img, target)  # CHW float32 3ch e boxes Tensor
         return img, target
 
     return transform
