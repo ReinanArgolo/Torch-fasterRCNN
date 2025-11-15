@@ -1,6 +1,6 @@
 # Example training configuration for Faster R-CNN
 # Paths
-project_root: "/home/reinanlinux/Documentos/TrainR-cnn"
+project_root: "."
 data:
   images:
     train_dir: "new_whales_rcnn/images/Train"
