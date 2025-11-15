@@ -7,3 +7,9 @@ Pillow>=10.0.0
 tqdm>=4.65.0
 pyyaml>=6.0
 matplotlib>=3.7.0
+
+# Optional / convenience packages for callbacks and higher-level training utilities
+# Install if you plan to use the PyTorch Lightning callback provided in callbacks/
+pytorch-lightning>=2.0.0
+# Install TensorFlow if you plan to use the Keras callback provided in callbacks/
+tensorflow>=2.12.0

@@ -38,6 +38,8 @@ class Trainer:
         self.best_val = float("inf")
         self.best_map = -float("inf")
         self.epochs_no_improve = 0
+        # path where we'll keep the best checkpoint for early stopping restoration
+        self.best_ckpt_path = os.path.join(self.exp_dir, "best.pth")
 
     def _train_one_epoch(self, loader, epoch: int):
         self.model.train()
@@ -81,11 +83,21 @@ class Trainer:
     def _early_stopping_check(self, epoch_metric, monitor_key: str):
         if not self.es_cfg.get("enabled", False):
             return False
-        mode = self.es_cfg.get("mode", "min")
-        min_delta = float(self.es_cfg.get("min_delta", 0.0))
-        patience = int(self.es_cfg.get("patience", 5))
+        # reconcile defaults with requested specs
+        mode = self.es_cfg.get("mode")
+        min_delta = float(self.es_cfg.get("min_delta", 1e-4))
+        patience = int(self.es_cfg.get("patience", 10))
+        restore_best = bool(self.es_cfg.get("restore_best_weights", True))
+
+        # if mode is not set, auto-detect from monitor_key
+        if mode is None:
+            if "map" in monitor_key.lower():
+                mode = "max"
+            else:
+                mode = "min"
         improved = False
-        if monitor_key == "val_loss":
+        # choose comparison based on mode
+        if mode == "min":
             if epoch_metric < (self.best_val - min_delta):
                 self.best_val = epoch_metric
                 improved = True
@@ -93,11 +105,48 @@ class Trainer:
             if epoch_metric > (self.best_map + min_delta):
                 self.best_map = epoch_metric
                 improved = True
+
+        # Save best checkpoint when improved
+        if improved:
+            # always save model state and optimizer/scheduler state to best_ckpt_path
+            save_checkpoint(
+                {
+                    "epoch": None,
+                    "model_state": self.model.state_dict(),
+                    "optim_state": self.optimizer.state_dict(),
+                    "sched_state": self.scheduler.state_dict(),
+                    "best_val": self.best_val,
+                    "best_map": self.best_map,
+                },
+                self.best_ckpt_path,
+            )
         if improved:
             self.epochs_no_improve = 0
         else:
             self.epochs_no_improve += 1
-        return self.epochs_no_improve >= patience
+        # if patience reached, optionally restore best and signal stop
+        if self.epochs_no_improve >= patience:
+            if restore_best and os.path.exists(self.best_ckpt_path):
+                try:
+                    ckpt = torch.load(self.best_ckpt_path, map_location="cpu")
+                    if "model_state" in ckpt:
+                        self.model.load_state_dict(ckpt["model_state"], strict=False)
+                    if "optim_state" in ckpt and self.optimizer is not None:
+                        try:
+                            self.optimizer.load_state_dict(ckpt["optim_state"])
+                        except Exception:
+                            # optimizer state may be incompatible; ignore if so
+                            pass
+                    if "sched_state" in ckpt and self.scheduler is not None:
+                        try:
+                            self.scheduler.load_state_dict(ckpt["sched_state"])
+                        except Exception:
+                            pass
+                    print(f"[Trainer] Restored best checkpoint from {self.best_ckpt_path} before stopping.")
+                except Exception as e:
+                    print(f"[Trainer] Failed to restore best checkpoint: {e}")
+            return True
+        return False
 
     def fit(self, train_loader, val_loader, train_ds, val_ds, start_epoch, epochs):
         hist_epochs, hist_train, hist_val, hist_map = [], [], [], []
@@ -166,7 +215,14 @@ class Trainer:
 
             stop = False
             monitor = self.es_cfg.get("monitor", "val_loss")
-            metric_current = val_map if (monitor == "map") else val_loss
+            # accept multiple monitor aliases; prefer val_mAP if configured
+            monitor_alias = monitor
+            if monitor_alias in ("map", "mAP"):
+                monitor_alias = "val_mAP"
+            if monitor_alias == "val_mAP":
+                metric_current = val_map
+            else:
+                metric_current = val_loss
             if val_loader is not None and metric_current is not None:
                 stop = self._early_stopping_check(metric_current, monitor)
                 if stop:
@@ -178,6 +234,16 @@ class Trainer:
 
         export_metrics(self.exp_dir, hist_epochs, hist_train, hist_val, hist_map)
         print("Treinamento completo.")
+        # After training finishes normally, if configured, restore best weights
+        if self.es_cfg.get("enabled", False) and bool(self.es_cfg.get("restore_best_weights", True)):
+            if os.path.exists(self.best_ckpt_path):
+                try:
+                    ckpt = torch.load(self.best_ckpt_path, map_location="cpu")
+                    if "model_state" in ckpt:
+                        self.model.load_state_dict(ckpt["model_state"], strict=False)
+                    print(f"[Trainer] Final best checkpoint restored from {self.best_ckpt_path}.")
+                except Exception as e:
+                    print(f"[Trainer] Failed to restore final best checkpoint: {e}")
         return {
             "epochs": hist_epochs,
             "train_loss": hist_train,

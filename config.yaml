@@ -42,10 +42,20 @@ output:
   save_every: 1
   resume: "resume"  # path to checkpoint to resume from
 
-# Early stopping to avoid overfitting
+# Early stopping to avoid overfitting (configured for fine-tuning)
 early_stopping:
   enabled: true
-  monitor: "val_loss"   # or "map"
-  mode: "min"           # "min" for val_loss, "max" for map
-  min_delta: 0.0
-  patience: 3
+  # monitor: choose metric to monitor. Recommended: 'val_loss' (default) or 'val_mAP'.
+  # The Trainer will also accept legacy names like 'map' or 'mAP' and map them to 'val_mAP'.
+  monitor: "val_loss"
+  # mode is auto-detected from monitor: 'min' for losses, 'max' for mAP-like metrics
+  # If you explicitly want to override, set mode: 'min' or 'max'
+  mode: null
+  # minimum change to qualify as improvement (default 1e-4)
+  min_delta: 0.0001
+  # patience in epochs (default 10)
+  patience: 10
+  # whether to restore best weights at the end of training
+  restore_best_weights: true
+  # prefer val_mAP automatically if available (will switch monitor to 'val_mAP')
+  prefer_val_mAP: true
