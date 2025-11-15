@@ -155,8 +155,21 @@ class COCODetectionDataset(Dataset):
         if self.transforms is not None:
             img = self.transforms(img)
         else:
-            # Default to ToTensor without normalization; torchvision models expect [0,1]
-            img = self.default_to_tensor(img)
+            # Se o pipeline de sample_transforms já retornou Tensor, não reconverta via PIL/NumPy.
+            # Garanta apenas tipo/escala corretos e formato CHW.
+            if isinstance(img, torch.Tensor):
+                # dtype e escala
+                if img.dtype != torch.float32:
+                    img = img.float()
+                # Se veio em 0..255, normalize para 0..1
+                if torch.is_floating_point(img) and img.max().item() > 1.0:
+                    img = img / 255.0
+                # Formato: se vier HWC, permutar para CHW
+                if img.ndim == 3 and img.shape[0] not in (1, 3, 4) and img.shape[-1] in (1, 3, 4):
+                    img = img.permute(2, 0, 1).contiguous()
+            else:
+                # Default to ToTensor without normalization; torchvision models expect [0,1]
+                img = self.default_to_tensor(img)
 
         return img, target
 
