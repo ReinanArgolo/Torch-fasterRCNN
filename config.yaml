@@ -31,6 +31,12 @@ training:
     resize:
       min_size: 800
       max_size: 1333
+    hflip_p: 0.5
+    short_sizes: [640, 672, 704, 736, 768, 800]
+    max_size: 1333
+    color_jitter: { p: 0.5, brightness: 0.2, contrast: 0.2, saturation: 0.2, hue: 0.02 }
+    use_iou_crop: false
+    min_iou: 0.3
 
 # Model
 model:
@@ -63,3 +69,7 @@ early_stopping:
   restore_best_weights: true
   # prefer val_mAP automatically if available (will switch monitor to 'val_mAP')
   prefer_val_mAP: true
+
+cross_validation:
+  enabled: true     # habilita CV
+  folds: 5          # número de folds
