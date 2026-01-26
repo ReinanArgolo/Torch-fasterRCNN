@@ -46,8 +46,8 @@ class Trainer:
         meter = AverageMeter("loss")
         pbar = tqdm(loader, desc=f"Epoch {epoch} [train]", leave=False)
         for images, targets in pbar:
-            images = [img.to(self.device) for img in images]
-            targets = [{k: v.to(self.device) for k, v in t.items()} for t in targets]
+            images = [img.to(self.device, non_blocking=True) for img in images]
+            targets = [{k: v.to(self.device, non_blocking=True) for k, v in t.items()} for t in targets]
             self.optimizer.zero_grad(set_to_none=True)
             if self.scaler is not None:
                 # API atual de AMP
@@ -72,8 +72,8 @@ class Trainer:
         pbar = tqdm(loader, desc="[val_loss]", leave=False)
         with torch.no_grad():
             for images, targets in pbar:
-                images = [img.to(self.device) for img in images]
-                targets = [{k: v.to(self.device) for k, v in t.items()} for t in targets]
+                images = [img.to(self.device, non_blocking=True) for img in images]
+                targets = [{k: v.to(self.device, non_blocking=True) for k, v in t.items()} for t in targets]
                 losses = self.model(images, targets)
                 loss = sum(losses.values())
                 meter.update(loss.item(), n=len(images))

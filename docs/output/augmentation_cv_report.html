@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Relatório Augmentation &amp; Cross-Validation</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Relatório Augmentation &amp; Cross-Validation</h1>
+</header>
+<h1
+id="relatório-metodológico-data-augmentation-e-validação-cruzada-em-detecção-com-faster-r-cnn">Relatório
+Metodológico: Data Augmentation e Validação Cruzada em Detecção com
+Faster R-CNN</h1>
+<p>Resumo - Este relatório descreve, em formato metodológico, os
+princípios, decisões e procedimentos recomendados para o uso de Data
+Augmentation e Validação Cruzada (K-fold) ao treinar detectores do tipo
+Faster R-CNN em datasets COCO-like.<br />
+- Fornecemos justificativas teóricas, protocolos experimentais, fórmulas
+para sumarização de resultados entre folds e um checklist prático para
+reprodutibilidade.</p>
+<ol type="1">
+<li>Introdução</li>
+</ol>
+<ul>
+<li>Objetivo: maximizar a capacidade de generalização do detector
+equilibrando viés e variância sob restrição de dados rotulados.<br />
+</li>
+<li>Problema: modelos de detecção são sensíveis a variações de escala,
+iluminação, oclusões e distribuição de classes. Data Augmentation mitiga
+overfitting; Validação Cruzada provê estimativas robustas de desempenho
+e variância.</li>
+</ul>
+<ol start="2" type="1">
+<li>Conjunto de Dados e Pré-processamento</li>
+</ol>
+<ul>
+<li>Formato: COCO (imagens + anotações com bboxes e categorias).<br />
+</li>
+<li>Qualidade de anotação é crítica: remover caixas degeneradas (w≤0 ou
+h≤0), padronizar índices de classes e consistência entre arquivos e
+imagens.<br />
+</li>
+<li>Normalização/Conversão: imagens em [0,1], preservando aspecto
+durante resize; bboxes transformadas de forma consistente.</li>
+</ul>
+<ol start="3" type="1">
+<li>Data Augmentation 3.1. Objetivos e Princípios</li>
+</ol>
+<ul>
+<li>Aumentar a diversidade de exemplos sem alterar a semântica das
+anotações.<br />
+</li>
+<li>Induzir invariâncias relevantes (translação, variações leves de
+escala e cor), mantendo a tarefa (detectar e localizar) inalterada.</li>
+</ul>
+<p>3.2. Operadores Recomendados (com diretrizes práticas) -
+Redimensionamento multi-escala (short_sizes ∈ {640,…,800},
+max_size≈1333): melhora robustez a escala de objetos.<br />
+- Flip horizontal (p≈0.5): útil para objetos sem orientação dominante;
+evite se a orientação for semanticamente relevante.<br />
+- Jitter de cor (p≈0.5; brilho/contraste/saturação modestos): promove
+invariância a iluminação; evite exageros que alterem
+textura-chave.<br />
+- Crop baseado em IoU mínimo (min_iou≈0.3–0.5): força o modelo a
+aprender com partes de objetos; monitore para não eliminar
+sistematicamente as anotações.<br />
+- Random translate/scale leves: ampliar variação sem distorcer aspecto.
+Evitar rotações rígidas de 90° se a orientação importar.</p>
+<p>3.3. Protocolo de Avaliação da Augmentation - Ablações: compare
+baseline (mínimo de augmentations) vs. incrementos (ex.: +flip,
++multi-escala, +jitter, +IoU-crop).<br />
+- Métricas: mAP (AP@[.5:.95]), AP50 e AP75 por época; inspecione curvas
+de aprendizado e estabilidade (desvio padrão entre folds).<br />
+- Critérios: aceite operadores que melhoram mAP médio e reduzem
+variância sem degradar AP75 (precisão de localização).</p>
+<ol start="4" type="1">
+<li>Validação Cruzada (K-fold) 4.1. Motivação</li>
+</ol>
+<ul>
+<li>Estimar desempenho esperado e sua variabilidade quando os dados
+rotulados são limitados.<br />
+</li>
+<li>Reduzir dependência de uma única divisão treino/val.</li>
+</ul>
+<p>4.2. Formação dos Folds - Estratificação por classes (quando
+possível) para manter proporções aproximadas de categorias em cada
+fold.<br />
+- Em detecção, estratificar por “presença por classe na imagem” e por
+grupos naturais para mitigar vazamento (leakage).<br />
+- Garantir que imagens correlacionadas não apareçam simultaneamente em
+treino e validação do mesmo fold.</p>
+<p>4.3. Procedimento K-fold - Particione IDs de imagem em K subconjuntos
+disjuntos.<br />
+- Para cada fold i∈{1,…,K}: valide naquele fold e treine nos demais K-1
+folds.<br />
+- Hiperparâmetros fixos ao longo dos folds; early stopping com monitor
+consistente (val_mAP ou val_loss).<br />
+- Semente aleatória controlada para reprodutibilidade
+(Python/NumPy/PyTorch).</p>
+<p>4.4. Agregação de Métricas e Intervalos de Confiança - Para uma
+métrica M (ex.: mAP) por fold M_i, calcule média e desvio padrão: <span
+class="math display">$$\bar{M} = \frac{1}{K} \sum_{i=1}^{K} M_i, \quad s
+= \sqrt{\frac{1}{K-1} \sum_{i=1}^{K} (M_i - \bar{M})^2}$$</span> -
+Intervalo de confiança (IC) 95% para a média (aproximação t-Student):
+<span class="math display">$$IC_{95\%} = \bar{M} \pm t_{0.975,\,K-1}
+\cdot \frac{s}{\sqrt{K}}$$</span> - Reporte também AP50 e AP75
+agregados; inclua tabela por fold e o IC para análise de robustez.</p>
+<p>Referências - Ren et al., 2015. Faster R-CNN.<br />
+- Lin et al., 2017. Feature Pyramid Networks.<br />
+- COCO Evaluation Toolkit e métricas AP@[.5:.95].</p>
+</body>
+</html>

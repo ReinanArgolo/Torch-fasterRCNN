@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Documentação Faster R-CNN</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Documentação Faster R-CNN</h1>
+</header>
+<h1
+id="documentação-do-pipeline-de-treinamento---faster-r-cnn">Documentação
+do Pipeline de Treinamento - Faster R-CNN</h1>
+<p>Bem-vindo à documentação do pipeline de treinamento Faster R-CNN
+presente neste repositório.</p>
+<p>Objetivo: - Explicar a arquitetura do código, como configurar o
+ambiente, executar treinamento e avaliação. - Fornecer instruções para
+exportar a documentação para outros formatos (HTML / PDF).</p>
+<p>Conteúdo desta pasta: - <code>setup.md</code> — requisitos e
+instalação - <code>code_structure.md</code> — visão geral dos arquivos e
+responsabilidades - <code>training.md</code> — fluxo de treino,
+checkpoints e early stopping - <code>cli.md</code> — argumentos de linha
+de comando e <code>config.yaml</code> - <code>exporting.md</code> — como
+exportar os arquivos Markdown para HTML/PDF -
+<code>methodology.md</code> — metodologia geral e boas práticas -
+<code>augmentation_cv_report.md</code> — relatório científico sobre Data
+Augmentation e K-fold CV</p>
+<p>Comandos rápidos</p>
+<p>Executar um treino básico:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> train.py <span class="at">--config</span> config.yaml</span></code></pre></div>
+<p>Exemplo com override de parâmetros:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> train.py <span class="at">--config</span> config.yaml <span class="at">--epochs</span> 10 <span class="at">--batch-size</span> 4 <span class="at">--lr</span> 0.002</span></code></pre></div>
+<p>Para instruções detalhadas, abra os tópicos abaixo.</p>
+<h1 id="configuração-do-ambiente">Configuração do Ambiente</h1>
+<p>Requisitos principais (Python e pacotes):</p>
+<ul>
+<li>Python 3.10+ recomendado</li>
+<li>CUDA compatível (se usar GPU)</li>
+<li>Dependências Python listadas em <code>requirements.txt</code></li>
+</ul>
+<p>Instalação rápida (virtualenv):</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> <span class="at">-m</span> venv .venv</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="bu">source</span> .venv/bin/activate</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install <span class="at">--upgrade</span> pip</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install <span class="at">-r</span> requirements.txt</span></code></pre></div>
+<p>Dependências de sistema (opcionais para exportar docs): -
+<code>pandoc</code> — para converter Markdown em HTML/PDF (instale via
+apt/conda/homebrew) - LaTeX (por exemplo <code>texlive</code>) —
+necessário para conversão para PDF via pandoc</p>
+<p>Ubuntu (exemplo):</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">sudo</span> apt update</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="fu">sudo</span> apt install pandoc texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended</span></code></pre></div>
+<p>Observações: - As versões exatas do PyTorch devem corresponder ao seu
+CUDA; o <code>requirements.txt</code> inclui um índice PyTorch com uma
+build CUDA como exemplo. - Para usar AMP (treinamento com precisão
+mista) habilite CUDA e <code>amp: true</code> em
+<code>config.yaml</code>.</p>
+<h1 id="estrutura-do-código">Estrutura do Código</h1>
+<p>Arquivos principais e responsabilidades:</p>
+<ul>
+<li><code>train.py</code>: CLI principal que carrega
+<code>config.yaml</code>, prepara datasets, model, otimizador e
+instancia <code>Trainer</code>.</li>
+<li><code>dataset.py</code>: implementação de
+<code>COCODetectionDataset</code> compatível com o formato COCO e
+<code>collate_fn</code>.</li>
+<li><code>transforms.py</code>: constrói as transformações aplicadas a
+cada amostra (a abstração usada por <code>train.py</code>).</li>
+<li><code>modules/model_factory.py</code>: função
+<code>get_model()</code> que cria modelos Faster R-CNN (vários nomes
+suportados) e substitui a cabeça quando necessário.</li>
+<li><code>modules/trainer.py</code>: classe <code>Trainer</code> que
+implementa <code>fit()</code> com loop de treino/validação,
+checkpointing, early stopping e exportação de métricas.</li>
+<li><code>modules/metrics.py</code>: utilitários para salvar/exportar
+métricas do treinamento.</li>
+<li><code>coco_eval.py</code> e <code>eval_coco.py</code>: avaliação
+compatível COCO (mAP) usada pelo <code>Trainer</code> quando
+<code>eval_map_every &gt; 0</code>.</li>
+<li><code>utils.py</code>: funções utilitárias (checkpointing,
+scheduler/optimizer builders, AverageMeter, formatação de tempo,
+etc.).</li>
+<li><code>infer.py</code> / <code>scripts/quick_infer.py</code>:
+utilitários para inferência e geração de predições.</li>
+</ul>
+<p>Padrões e observações: - O dataset mapeia arquivos de
+<code>file_name</code> no JSON COCO para um diretório de imagens, com
+heurísticas de resolução de nomes. - <code>Trainer</code> salva
+checkpoints em
+<code>outputs/&lt;experiment&gt;/&lt;run_stamp&gt;/epoch_XXX/checkpoint_epoch_XXX.pth</code>
+e mantém um <code>best.pth</code> quando early-stopping estiver
+habilitado. - Amostras visualizadas com bounding boxes são salvas em
+diretórios <code>epoch_XXX/samples/</code>.</p>
+<h1 id="fluxo-de-treinamento-resumo">Fluxo de Treinamento (Resumo)</h1>
+<p>Esse documento fornece um resumo prático do fluxo de treinamento
+presente no repositório. Para uma discussão metodológica aprofundada —
+motivação, escolhas de design, dicas para estabilizar e otimizar o
+treino — veja <code>methodology.md</code> nesta mesma pasta.</p>
+<p>Principais etapas do pipeline:</p>
+<ol type="1">
+<li>Preparação</li>
+</ol>
+<ul>
+<li>O script de entrada lê um arquivo YAML de configuração e permite
+overrides por CLI (<code>--epochs</code>, <code>--batch-size</code>,
+etc.).</li>
+</ul>
+<ol start="2" type="1">
+<li>Transformações e Augmentations</li>
+</ol>
+<ul>
+<li>As transformações de amostra (redimensionamento, flips, jitter de
+cor, crop baseado em IoU etc.) são aplicadas de modo a alterar também as
+caixas delimitadoras corretamente.</li>
+</ul>
+<ol start="3" type="1">
+<li>Dataset e DataLoader</li>
+</ol>
+<ul>
+<li>O dataset COCO resolve nomes de arquivo e retorna pares (imagem,
+target) prontos para os modelos do <code>torchvision</code>.</li>
+<li>O DataLoader usa um <code>collate_fn</code> que empacota lotes
+variáveis de anotações.</li>
+</ul>
+<ol start="4" type="1">
+<li>Modelo e Cabeça</li>
+</ol>
+<ul>
+<li>O backbone e as componentes do Faster R-CNN (RPN, FPN, RoI heads)
+são instanciados a partir de funções utilitárias; a cabeça de predição é
+substituída quando <code>num_classes</code> difere do padrão.</li>
+</ul>
+<ol start="5" type="1">
+<li>Otimização e Precisão Mista</li>
+</ol>
+<ul>
+<li>Otimizador, scheduler e (opcional) AMP são configurados pela
+<code>config.yaml</code>; o treinamento suporta <code>torch.amp</code>
+quando CUDA está disponível.</li>
+</ul>
+<ol start="6" type="1">
+<li>Loop de Treino e Validação</li>
+</ol>
+<ul>
+<li>A cada época ocorre treino por batches, update do scheduler,
+avaliação de perda em validação e (opcional) cálculo de COCO mAP.</li>
+</ul>
+<ol start="7" type="1">
+<li>Checkpointing e Early Stopping</li>
+</ol>
+<ul>
+<li>Checkpoints periódicos e um <code>best.pth</code> são salvos; early
+stopping pode monitorar <code>val_loss</code> ou <code>val_mAP</code> e
+restaurar pesos.</li>
+</ul>
+<ol start="8" type="1">
+<li>Cross-validation</li>
+</ol>
+<ul>
+<li>Há suporte a K-fold CV gerando subconjuntos COCO a partir do JSON de
+treino e executando experimentos separados por fold.</li>
+</ul>
+<ol start="9" type="1">
+<li>Artefatos</li>
+</ol>
+<ul>
+<li>As saídas principais incluem checkpoints, visualizações de amostra
+por época, e métricas exportadas (CSV/JSON).</li>
+</ul>
+<p>Para uma visão metodológica detalhada (motivação por trás de cada
+escolha, boas práticas, armadilhas e estratégias de debug), abra
+<code>docs/methodology.md</code>.</p>
+<h1 id="linha-de-comando-e-config.yaml">Linha de Comando e
+<code>config.yaml</code></h1>
+<p>Argumentos principais de <code>train.py</code>:</p>
+<ul>
+<li><code>--config</code> (obrigatório): caminho para o arquivo YAML de
+configuração, ex.: <code>config.yaml</code>.</li>
+<li><code>--project-root</code>: sobrescreve <code>project_root</code>
+do YAML (útil para runs locais/relativos).</li>
+<li><code>--resume</code>: caminho para checkpoint <code>.pth</code>
+para retomar treino.</li>
+<li><code>--epochs</code>, <code>--batch-size</code>, <code>--lr</code>,
+<code>--num-workers</code>, <code>--seed</code>: sobrescrevem valores do
+YAML.</li>
+<li><code>--eval-map-every</code>: avalia COCO mAP a cada N épocas (0
+para desabilitar).</li>
+</ul>
+<p>Exemplo de execução:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> train.py <span class="at">--config</span> config.yaml <span class="at">--project-root</span> . <span class="at">--epochs</span> 6 <span class="at">--batch-size</span> 2</span></code></pre></div>
+<p>Estrutura do <code>config.yaml</code> (exemplo resumido):</p>
+<ul>
+<li><code>project_root</code>: pasta base para resolver caminhos.</li>
+<li><code>data.images.train_dir</code>,
+<code>data.images.val_dir</code>: diretórios de imagens.</li>
+<li><code>data.annotations.train_json</code>,
+<code>data.annotations.val_json</code>: JSONs COCO.</li>
+<li><code>training</code>: parâmetros (<code>epochs</code>,
+<code>batch_size</code>, <code>lr</code>, <code>num_workers</code>,
+<code>amp</code>, <code>eval_map_every</code>,
+<code>transforms</code>).</li>
+<li><code>model</code>: <code>name</code>, <code>pretrained</code>,
+<code>num_classes</code>.</li>
+<li><code>output</code>: <code>dir</code>, <code>experiment</code>,
+<code>save_every</code>, <code>resume</code>.</li>
+<li><code>early_stopping</code>: configurações descritas em
+<code>training.md</code>.</li>
+<li><code>cross_validation</code>: <code>enabled</code>,
+<code>folds</code>.</li>
+</ul>
+<p>Dica: use valores pequenos para debug (poucas épocas e
+<code>num_workers=0</code>).</p>
+<h1 id="exportando-a-documentação">Exportando a documentação</h1>
+<p>Esta pasta contém arquivos em Markdown. Há várias formas de
+exportar:</p>
+<ol type="1">
+<li>Usando <code>pandoc</code> (recomendado para HTML/PDF simples)</li>
+</ol>
+<ul>
+<li>Gerar HTML combinado:</li>
+</ul>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pandoc</span> <span class="at">-s</span> <span class="at">-o</span> docs/output/docs.html docs/index.md docs/setup.md docs/code_structure.md docs/training.md docs/cli.md docs/exporting.md <span class="at">--metadata</span> title=<span class="st">&quot;Documentação Faster R-CNN&quot;</span></span></code></pre></div>
+<ul>
+<li>Gerar PDF (requer LaTeX):</li>
+</ul>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pandoc</span> <span class="at">-s</span> <span class="at">-o</span> docs/output/docs.pdf docs/index.md docs/setup.md docs/code_structure.md docs/training.md docs/cli.md docs/exporting.md <span class="at">--metadata</span> title=<span class="st">&quot;Documentação Faster R-CNN&quot;</span></span></code></pre></div>
+<ol start="2" type="1">
+<li>Usando <code>mkdocs</code> (site navegável)</li>
+</ol>
+<ul>
+<li>Instale <code>mkdocs</code> e (opcional)
+<code>mkdocs-material</code>:</li>
+</ul>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install mkdocs mkdocs-material</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="ex">mkdocs</span> new . <span class="at">--no-input</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="co"># adaptação manual: copiar arquivos de `docs/` para `docs/` do mkdocs e editar mkdocs.yml</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="ex">mkdocs</span> build</span></code></pre></div>
+<ol start="3" type="1">
+<li>Script de conveniência</li>
+</ol>
+<ul>
+<li>Um script <code>docs/export.sh</code> está incluído para gerar HTML
+e PDF automaticamente.</li>
+</ul>
+<p>Problemas comuns - PDF via <code>pandoc</code> normalmente requer uma
+distribuição LaTeX completa; se estiver faltando pacote, a conversão
+pode falhar. - Para documentação mais rica (search, navegação) use
+<code>mkdocs</code>.</p>
+<h1 id="metodologia-de-treinamento-detalhes-e-boas-práticas">Metodologia
+de Treinamento — Detalhes e Boas Práticas</h1>
+<p>Este texto explica em profundidade as decisões e práticas
+recomendadas para treinar um detector Faster R-CNN em datasets no
+formato COCO. O objetivo é transmitir a “intuição” e os trade-offs por
+trás das escolhas de pipeline, sem entrar em trechos de código.</p>
+<p><strong>1. Objetivo do Modelo e Métricas</strong> - Objetivo:
+detectar instâncias de objetos (caixas + classes) em imagens. Para
+detecção, a métrica padrão é o COCO mAP (mean Average Precision)
+avaliado em múltiplas IoU thresholds (AP@[.5:.95]) — ela reflete a
+qualidade das localizações e classificações. - Use AP50 e AP75 para
+avaliar sensibilidade a localização: AP50 (IoU≥0.5) é permissiva; AP75
+exige boxes mais precisas.</p>
+<p><strong>2. Preparação do Dataset</strong> - Qualidade das anotações:
+caixas incorretas ou rótulos inconsistentes prejudicam fortemente o
+treino. Verifique outliers (boxes muito pequenas/grandes ou áreas
+negativas) e remova/ajuste. - Balanceamento: classes raras podem
+demandar oversampling, augmentation direcionada ou loss re-weighting. -
+Divisão treino/val: reserve um conjunto de validação representativo. Em
+imagens geograficamente estratificadas (ex.: câmeras, locais), mantenha
+divisão por grupo para evitar vazamento.</p>
+<p><strong>3. Transformações e Data Augmentation</strong> - Propósito:
+aumentar variedade, reduzir overfitting, tornar o modelo robusto a
+diferentes condições. - Tipos úteis: - Redimensionamento com conservação
+de aspecto (min_size / max_size) para manter escalas de objeto
+previsíveis. - Flips horizontais aleatórios para aumentar simetria. -
+Jitter de cor (brightness/contrast/saturation/hue) para invariância a
+iluminação. - Random crops e IoU-aware cropping: útil para forçar o
+detector aprender a localizar em partes menores; porém, cuidado para não
+cortar quase todas as anotações (desbalanceia). - Escalonamento
+aleatório e multi-scale training: treinar em múltiplas resoluções ajuda
+a detectar objetos em escalas variadas. - Boas práticas: aplicar
+augmentations que preservem a semântica (não rotacionar em 90° se os
+objetos têm orientação importante) e garantir transformação consistente
+entre imagem e caixas.</p>
+<p><strong>4. Arquitetura (Rápido Overview)</strong> - Faster R-CNN:
+backbone (ex.: ResNet) extrai features → FPN (Feature Pyramid Network)
+combina escalas → RPN (Region Proposal Network) gera propostas → RoI
+Pooling/Align + cabeças classificadora/regressora refinam e classificam
+boxes. - Escolhas de backbone (ResNet50 vs ResNet101) implicam trade-off
+entre precisão e custo computacional.</p>
+<p><strong>5. Losses e Estabilidade do Treino</strong> - Loss total
+combina múltiplos termos: loss do RPN (objectness + bbox regression) e
+loss das cabeças (classificação + bbox regression). O balanceamento
+desses termos afeta prioridades do modelo. - Gradientes instáveis podem
+surgir com learning rates altos, batch-size pequeno ou exemplos com
+grande perda — use clipping de gradiente se necessário.</p>
+<p><strong>6. Otimizador e Scheduler</strong> - Otimizadores comuns: SGD
+com momentum para estabilidade e boa generalização; AdamW pode convergir
+mais rápido, mas ocasionalmente generaliza pior em detecção. - Weight
+decay ajuda a regularizar pesos convolucionais e fully-connected. -
+Scheduler: StepLR/ReduceLROnPlateau/Cosine annealing. Uma estratégia
+prática é reduzir learning rate em plateaus de validação ou usar
+milestones fixos após observar quando a curva de validação estagna.</p>
+<p><strong>7. Batch Size, Normalização e BatchNorm</strong> - Detecção
+de objetos frequentemente usa batch-sizes pequenos por GPU (1–4) devido
+ao custo de memória. Isso afeta camadas BatchNorm — considere usar
+SyncBatchNorm ou congelar BatchNorm durante fine-tuning (usar
+estatísticas pré-treinadas) se o batch for muito pequeno.</p>
+<p><strong>8. Treinamento em Precisão Mista (AMP)</strong> - Benefícios:
+reduz uso de VRAM e acelera FP16-capable GPUs. Atenção a operações que
+não são estáveis em FP16 (algumas versões de ROIAlign/ops customizados).
+Usar <code>GradScaler</code> para escala automática do gradiente.</p>
+<p><strong>9. Checkpointing e Recuperação</strong> - Salve checkpoints
+periódicos e mantenha um <code>best</code> (por exemplo, melhor mAP ou
+menor val_loss). Salvar também o estado do otimizador e scheduler
+permite retomar com comportamento idêntico.</p>
+<p><strong>10. Early Stopping — Estratégia</strong> - Early stopping
+reduz overfitting e economiza GPU time. Configure <code>patience</code>
+e <code>min_delta</code> baseados na variabilidade da métrica: datasets
+pequenos exigem mais cuidado com ruído. - Monitorar <code>val_mAP</code>
+é preferível quando mAP estável; <code>val_loss</code> é mais ruidoso e
+pode não refletir qualidade de bounding boxes.</p>
+<p><strong>11. Cross-Validation</strong> - K-fold CV oferece estimativa
+robusta de variância do modelo e ajuda quando os dados são limitados. Ao
+gerar folds em COCO, mantenha distribuição de classes e verifique que
+não exista sobreposição de imagens (ou grupos correlacionados) entre
+folds.</p>
+<p><strong>12. Avaliação (COCO mAP)</strong> - AP@[.5:.95] é a média de
+APs em 10 IoU thresholds; fornece visão global. - Para problemas onde
+localização precisa é crítica, reporte AP75; para detecções gerais, AP50
+costuma ser mais estável.</p>
+<p><strong>13. Visualização e Debugging</strong> - Salvar imagens com
+boxes e scores ajuda a identificar: - problemas de escala (boxes muito
+grandes/pequenas), - classes confundidas, - problemas de anotação
+(caixas fora do objeto). - Verifique histogramas de perdas por lote para
+detectar batches com perda muito alta (outliers).</p>
+<p><strong>14. Heurísticas de Hyperparameter Tuning</strong> - Learning
+rate: experimente escalonar por regra linear com batch size (se aumentar
+batch, aumente lr proporcionalmente até certo limite). - Weight decay:
+valores entre 1e-3 e 1e-5; filtre por validação. - Number of proposals
+(RPN): reduzir para acelerar inferência, mas pode reduzir recall.</p>
+<p><strong>15. Inferência e Pós-processamento</strong> - Non-maximum
+suppression (NMS) e thresholds de score governam número de boxes finais.
+Ajuste <code>score_thresh</code> para equilibrar precisão/recall. - Para
+deployment em edge devices, quantize ou exporte para ONNX/TorchScript e
+reduza backbone.</p>
+<p><strong>16. Considerações Computacionais</strong> - Monitore uso de
+VRAM e tempo por batch; ajuste <code>num_workers</code>,
+<code>pin_memory</code> e <code>prefetch_factor</code> no DataLoader
+para throughput.</p>
+<p><strong>17. Reprodutibilidade</strong> - Defina sementes globais
+(PyTorch, NumPy, Python random) e anote versões de dependências.
+Determinismo completo pode degradar desempenho — documente as
+decisões.</p>
+<p><strong>18. Checklist de Debug Rápido</strong> - Verifique anotações
+COCO (formatos e ids).<br />
+- Visualize amostras com bboxes.<br />
+- Teste forward pass com um batch pequeno para garantir shapes.<br />
+- Tente reduzir lr se perdas explode.</p>
+<p><strong>19. Experimentos Recomendados</strong> - Baseline: backbone
+ResNet50, lr=0.005, batch=2, epochs=12, StepLR (milestone=8,11).<br />
+- Experimento AMP vs FP32 para medir ganho de throughput.<br />
+- Curva de learning rate (1–5 rodadas) para encontrar ponto de
+quebra.</p>
+<p>Referências para aprofundar: - Ren et al., “Faster R-CNN” (2015) —
+arquitetura base. - Lin et al., “Feature Pyramid Networks” (2016) —
+multicamada de features para detecção em escalas. - COCO evaluation
+toolkit — entender métricas padrão.</p>
+<hr />
+<p>Se quiser, posso transformar seções específicas em checklists
+operacionais (por exemplo: “Antes de rodar um treino grande, verifique
+X/Y/Z”) ou gerar um documento de experiments tracking (CSV/JSON)
+integrado ao <code>outputs/</code> para registrar HParams e
+resultados.</p>
+<h1
+id="relatório-metodológico-data-augmentation-e-validação-cruzada-em-detecção-com-faster-r-cnn">Relatório
+Metodológico: Data Augmentation e Validação Cruzada em Detecção com
+Faster R-CNN</h1>
+<p>Autores: Equipe Torch-fasterRCNN<br />
+Data: 21/11/2025</p>
+<p>Resumo - Este relatório descreve, em formato metodológico, os
+princípios, decisões e procedimentos recomendados para o uso de Data
+Augmentation e Validação Cruzada (K-fold) ao treinar detectores do tipo
+Faster R-CNN em datasets COCO-like.<br />
+- Fornecemos justificativas teóricas, protocolos experimentais, fórmulas
+para sumarização de resultados entre folds e um checklist prático para
+reprodutibilidade.</p>
+<ol type="1">
+<li>Introdução</li>
+</ol>
+<ul>
+<li>Objetivo: maximizar a capacidade de generalização do detector
+equilibrando viés e variância sob restrição de dados rotulados.<br />
+</li>
+<li>Problema: modelos de detecção são sensíveis a variações de escala,
+iluminação, oclusões e distribuição de classes. Data Augmentation mitiga
+overfitting; Validação Cruzada provê estimativas robustas de desempenho
+e variância.</li>
+</ul>
+<ol start="2" type="1">
+<li>Conjunto de Dados e Pré-processamento</li>
+</ol>
+<ul>
+<li>Formato: COCO (imagens + anotações com bboxes e categorias).<br />
+</li>
+<li>Qualidade de anotação é crítica: remover caixas degeneradas (w≤0 ou
+h≤0), padronizar índices de classes e consistência entre arquivos e
+imagens.<br />
+</li>
+<li>Normalização/Conversão: imagens em [0,1], preservando aspecto
+durante resize; bboxes transformadas de forma consistente.</li>
+</ul>
+<ol start="3" type="1">
+<li>Data Augmentation 3.1. Objetivos e Princípios</li>
+</ol>
+<ul>
+<li>Aumentar a diversidade de exemplos sem alterar a semântica das
+anotações.<br />
+</li>
+<li>Induzir invariâncias relevantes (translação, variações leves de
+escala e cor), mantendo a tarefa (detectar e localizar) inalterada.</li>
+</ul>
+<p>3.2. Operadores Recomendados (com diretrizes práticas) -
+Redimensionamento multi-escala (short_sizes ∈ {640,…,800},
+max_size≈1333): melhora robustez a escala de objetos.<br />
+- Flip horizontal (p≈0.5): útil para objetos sem orientação dominante;
+evite se a orientação for semanticamente relevante.<br />
+- Jitter de cor (p≈0.5; brilho/contraste/saturação modestos): promove
+invariância a iluminação; evite exageros que alterem
+textura-chave.<br />
+- Crop baseado em IoU mínimo (min_iou≈0.3–0.5): força o modelo a
+aprender com partes de objetos; monitore para não eliminar
+sistematicamente as anotações.<br />
+- Random translate/scale leves: ampliar variação sem distorcer aspecto.
+Evitar rotações rígidas de 90° se a orientação importar.</p>
+<p>3.3. Justificativa Teórica (viés–variância) - Augmentation efetiva
+reduz variância do estimador ao expandir o suporte dos dados treináveis,
+aproximando melhor a distribuição alvo.<br />
+- Over-augmentation pode introduzir deslocamento de distribuição (shift)
+e aumentar viés; ajuste intensidades e probabilidades via ablações.</p>
+<p>3.4. Protocolo de Avaliação da Augmentation - Ablações: compare
+baseline (mínimo de augmentations) vs. incrementos (ex.: +flip,
++multi-escala, +jitter, +IoU-crop).<br />
+- Métricas: mAP (AP@[.5:.95]), AP50 e AP75 por época; inspecione curvas
+de aprendizado e estabilidade (desvio padrão entre folds).<br />
+- Critérios: aceite operadores que melhoram mAP médio e reduzem
+variância sem degradar AP75 (precisão de localização).</p>
+<p>3.5. Riscos e Controles - Artefatos: saturação de cor, crops que
+removem objetos de interesse, deformações não realistas.<br />
+- Controles: inspeção visual periódica, limites nos parâmetros, revisão
+de amostras por época (snapshots de detecções).</p>
+<ol start="4" type="1">
+<li>Validação Cruzada (K-fold) 4.1. Motivação</li>
+</ol>
+<ul>
+<li>Estimar desempenho esperado e sua variabilidade quando os dados
+rotulados são limitados.<br />
+</li>
+<li>Reduzir dependência de uma única divisão treino/val.</li>
+</ul>
+<p>4.2. Formação dos Folds - Estratificação por classes (quando
+possível) para manter proporções aproximadas de categorias em cada
+fold.<br />
+- Em detecção, estratificar por “presença por classe na imagem” e por
+grupos naturais (ex.: câmera, local) para mitigar vazamento
+(leakage).<br />
+- Garantir que imagens correlacionadas não apareçam simultaneamente em
+treino e validação do mesmo fold.</p>
+<p>4.3. Procedimento K-fold - Particione IDs de imagem em K subconjuntos
+disjuntos.<br />
+- Para cada fold i∈{1,…,K}: valide naquele fold e treine nos demais K-1
+folds.<br />
+- Hiperparâmetros fixos ao longo dos folds; early stopping com monitor
+consistente (val_mAP ou val_loss).<br />
+- Semente aleatória controlada para reprodutibilidade
+(Python/NumPy/PyTorch).</p>
+<p>4.4. Agregação de Métricas e Intervalos de Confiança - Para uma
+métrica M (ex.: mAP) por fold M_i, calcule média e desvio padrão: <span
+class="math display">$$\bar{M} = \frac{1}{K} \sum_{i=1}^{K} M_i, \quad s
+= \sqrt{\frac{1}{K-1} \sum_{i=1}^{K} (M_i - \bar{M})^2}$$</span> -
+Intervalo de confiança (IC) 95% para a média (aproximação t-Student):
+<span class="math display">$$IC_{95\%} = \bar{M} \pm t_{0.975,\,K-1}
+\cdot \frac{s}{\sqrt{K}}$$</span> - Reporte também AP50 e AP75
+agregados; inclua tabela por fold e o IC para análise de robustez.</p>
+<p>4.5. Testes de Hipótese (Opcional) - Comparar duas configurações (A
+vs B) com teste t pareado sobre os K folds (M_i^A vs M_i^B). Defina H0:
+média das diferenças = 0.<br />
+- Use p-valor e tamanho de efeito (Cohen’s d) para julgar relevância
+prática.</p>
+<ol start="5" type="1">
+<li>Protocolo Experimental Recomendado</li>
+</ol>
+<ul>
+<li>Hiperparâmetros: LR inicial (e.g., 0.005), batch pequeno (2–4),
+weight decay (5e-4), scheduler por marcos ou plateau.<br />
+</li>
+<li>AMP: habilitar em GPUs compatíveis para throughput e menor VRAM,
+validando estabilidade.<br />
+</li>
+<li>Early Stopping: <code>patience</code> escolhido segundo ruído da
+métrica; monitorar <code>val_mAP</code> quando disponível.<br />
+</li>
+<li>Curvas: registrar evolução de mAP, AP50, AP75 e perda; salvar
+snapshots visuais por época para diagnóstico qualitativo.</li>
+</ul>
+<ol start="6" type="1">
+<li>Interpretação de Resultados</li>
+</ol>
+<ul>
+<li>Ganhos de mAP acompanhados de melhora em AP75 indicam melhor
+localização.<br />
+</li>
+<li>Redução de variância entre folds sugere augmentation e regularização
+adequadas.<br />
+</li>
+<li>Divergência entre val_loss e val_mAP pode ocorrer; privilegie a
+métrica-alvo (mAP) para decisões de parada.</li>
+</ul>
+<ol start="7" type="1">
+<li>Reprodutibilidade e Rastreamento</li>
+</ol>
+<ul>
+<li>Fixar sementes; registrar versões de dependências; salvar
+checkpoints e métricas (CSV/JSON).<br />
+</li>
+<li>Nomear experimentos por data/hparams; manter logs de console e
+configuração de augmentation e CV utilizados.</li>
+</ul>
+<ol start="8" type="1">
+<li>Checklist Prático</li>
+</ol>
+<ul class="task-list">
+<li><label><input type="checkbox" />Valide integridade COCO (ids de
+imagem e anotações)<br />
+</label></li>
+<li><label><input type="checkbox" />Inspecione amostras com
+augmentations aplicadas<br />
+</label></li>
+<li><label><input type="checkbox" />Defina K e crie folds
+estratificados<br />
+</label></li>
+<li><label><input type="checkbox" />Fixe hiperparâmetros e semente<br />
+</label></li>
+<li><label><input type="checkbox" />Rode ablações de augmentation<br />
+</label></li>
+<li><label><input type="checkbox" />Agregue métricas com média, desvio e
+IC<br />
+</label></li>
+<li><label><input type="checkbox" />Documente setup e
+resultados</label></li>
+</ul>
+<ol start="9" type="1">
+<li>Conclusões</li>
+</ol>
+<ul>
+<li>Data Augmentation, quando calibrado, reduz variância e melhora
+generalização em detecção.<br />
+</li>
+<li>Validação Cruzada produz estimativa mais confiável de desempenho e
+sua incerteza; recomenda-se reportar média±IC e, quando possível, testes
+pareados em ablações.</li>
+</ul>
+<p>Referências - Ren et al., 2015. Faster R-CNN.<br />
+- Lin et al., 2017. Feature Pyramid Networks.<br />
+- COCO Evaluation Toolkit e métricas AP@[.5:.95].</p>
+</body>
+</html>

@@ -125,6 +125,26 @@ def main():
     print(f"Execução em: {exp_dir}")
 
     set_seed(seed)
+    # Ajustes de backend para melhor throughput quando usando CUDA
+    if torch.cuda.is_available():
+        try:
+            torch.backends.cudnn.benchmark = True
+        except Exception:
+            pass
+
+    # Log de dispositivo e ambiente CUDA para diagnóstico
+    try:
+        visible = os.environ.get("CUDA_VISIBLE_DEVICES", "<unset>")
+        print(f"[CUDA] visible={visible} | available={torch.cuda.is_available()} | count={torch.cuda.device_count()}")
+        if torch.cuda.is_available():
+            try:
+                curr = torch.cuda.current_device()
+                name = torch.cuda.get_device_name(curr)
+                print(f"[CUDA] using device index={curr} name={name}")
+            except Exception as _e:
+                print(f"[CUDA] device query error: {_e}")
+    except Exception as _e:
+        print(f"[CUDA] env check failed: {_e}")
 
     # Transforms
     train_sample_transform = build_sample_transform(train_cfg.get("transforms", {}))
@@ -156,8 +176,26 @@ def main():
             train_ds = COCODetectionDataset(cv_images_root, fold_train_ann, sample_transforms=train_sample_transform)
             val_ds = COCODetectionDataset(cv_images_root, fold_val_ann, sample_transforms=val_sample_transform)
 
-            train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, collate_fn=collate_fn)
-            val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, collate_fn=collate_fn)
+            train_loader = DataLoader(
+                train_ds,
+                batch_size=batch_size,
+                shuffle=True,
+                num_workers=num_workers,
+                collate_fn=collate_fn,
+                pin_memory=torch.cuda.is_available(),
+                persistent_workers=num_workers > 0,
+                prefetch_factor=2 if num_workers and num_workers > 0 else None,
+            )
+            val_loader = DataLoader(
+                val_ds,
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=num_workers,
+                collate_fn=collate_fn,
+                pin_memory=torch.cuda.is_available(),
+                persistent_workers=num_workers > 0,
+                prefetch_factor=2 if num_workers and num_workers > 0 else None,
+            )
 
             # Modelo/otimizador por fold
             num_classes = int(model_cfg.get("num_classes", 2))
@@ -200,8 +238,30 @@ def main():
     train_ds = COCODetectionDataset(train_images, train_ann, sample_transforms=train_sample_transform)
     val_ds = COCODetectionDataset(val_images, val_ann, sample_transforms=val_sample_transform) if val_images and val_ann and os.path.exists(val_ann) else None
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, collate_fn=collate_fn)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, collate_fn=collate_fn) if val_ds else None
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        collate_fn=collate_fn,
+        pin_memory=torch.cuda.is_available(),
+        persistent_workers=num_workers > 0,
+        prefetch_factor=2 if num_workers and num_workers > 0 else None,
+    )
+    val_loader = (
+        DataLoader(
+            val_ds,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            collate_fn=collate_fn,
+            pin_memory=torch.cuda.is_available(),
+            persistent_workers=num_workers > 0,
+            prefetch_factor=2 if num_workers and num_workers > 0 else None,
+        )
+        if val_ds
+        else None
+    )
 
     num_classes = int(model_cfg.get("num_classes", 2))
     model_name = str(model_cfg.get("name", "fasterrcnn_resnet50_fpn_v2"))

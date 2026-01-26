@@ -1,0 +1,5 @@
+# Dependências úteis para trabalhar com a documentação
+mkdocs
+mkdocs-material
+pypandoc
+# pandoc e LaTeX são normalmente instalados via sistema operacional (apt/conda/homebrew), não via pip
