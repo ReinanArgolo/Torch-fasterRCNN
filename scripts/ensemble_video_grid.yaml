@@ -1,0 +1,55 @@
+# Config para scripts/ensemble_video_grid.py
+# Você pode rodar só com: --config scripts/ensemble_video_grid.yaml
+
+video_grid:
+  run_dir: "outputs/fasterrcnn_test/run_20260126_000613"
+  video: "/home/reinanlinux/Documentos/Videos/Whales_processed/video-ensemble-funcionando/DJI_0009.MOV"
+  out: "outputs/ensemble_grid_DJI_0009.mp4"
+
+  # Se true: abre janela (requer display). Em servidor headless, deixe false.
+  gui: true
+  # Saída 16:9 (canvas final). Isso melhora MUITO a legibilidade.
+  out_w: 1920
+  out_h: 1080
+
+  # Tamanho máximo do grid na tela (só afeta --gui, não afeta MP4)
+  gui_max_w: 1920
+  gui_max_h: 1080
+  # Se true: não grava mp4 (útil com gui)
+  no_mp4: true
+
+  # Inferência
+  score_thresh: 0.80
+  max_boxes: 100
+
+  # Vídeo
+  every: 5
+  max_frames: 300
+  out_fps: 10.0
+
+  # Ensemble WBF (Weighted Boxes Fusion)
+  wbf:
+    iou: 0.55
+    skip_box_thr: 0.0
+    conf_type: "max"   # "avg" ou "max"
+    # Opcional: um peso por fold (tem que bater com a quantidade de checkpoints)
+    # weights: [1.0, 1.0, 1.0, 1.0, 1.0]
+
+  # Grid
+  grid:
+    cell: 540
+    cols: 3
+    rows: 2
+
+model:
+  name: "fasterrcnn_resnet50_fpn_v2"
+  num_classes: 2  # background + whale
+  # Estes parâmetros são passados para modules.get_model(..., **model.params)
+  params:
+    anchor_sizes: [[16], [32], [64], [128], [256]]
+    rpn_pre_nms_top_n_train: 4000
+    rpn_pre_nms_top_n_test: 2000
+    rpn_post_nms_top_n_train: 4000
+    rpn_post_nms_top_n_test: 2000
+    box_nms_thresh: 0.6
+    box_detections_per_img: 300

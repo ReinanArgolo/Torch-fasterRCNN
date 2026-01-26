@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,12 @@ import torch
 import torchvision
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 import yaml
+
+# Allow running via: python scripts/ensemble_video_grid.py
+# (so sibling package `modules/` is importable)
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from modules import get_model
 
@@ -79,6 +86,38 @@ def _pil_rgb_to_cv2_bgr(img: Image.Image):
     rgb = torchvision.transforms.functional.pil_to_tensor(img).permute(1, 2, 0).contiguous().numpy()
     bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
     return bgr
+
+
+def _pil_resample(name: str):
+    # Pillow compatibility across versions
+    try:
+        resampling = Image.Resampling  # type: ignore[attr-defined]
+    except Exception:
+        resampling = Image
+
+    mapping = {
+        "nearest": getattr(resampling, "NEAREST", 0),
+        "bilinear": getattr(resampling, "BILINEAR", 2),
+        "bicubic": getattr(resampling, "BICUBIC", 3),
+        "lanczos": getattr(resampling, "LANCZOS", 1),
+    }
+    return mapping.get(str(name).lower(), mapping["bicubic"])
+
+
+def _contain_resize(img: Image.Image, max_w: int, max_h: int) -> Image.Image:
+    if max_w <= 0 or max_h <= 0:
+        return img
+    w, h = img.size
+    if w <= 0 or h <= 0:
+        return img
+    scale = min(float(max_w) / float(w), float(max_h) / float(h), 1e9)
+    if scale >= 0.999 and w <= max_w and h <= max_h:
+        return img
+
+    nw = max(1, int(round(w * scale)))
+    nh = max(1, int(round(h * scale)))
+    resample = _pil_resample("lanczos" if scale < 1.0 else "bicubic")
+    return img.resize((nw, nh), resample=resample)
 
 
 def _predict(model, img_t: torch.Tensor, score_thresh: float) -> List[Det]:
@@ -258,7 +297,7 @@ def _label_color(label: int) -> Tuple[int, int, int]:
     return palette[int(label) % len(palette)]
 
 
-def _draw_dets(pil: Image.Image, dets: Sequence[Det], title: str, score_thresh: float, max_boxes: int) -> Image.Image:
+def _draw_dets(pil: Image.Image, dets: Sequence[Det], score_thresh: float, max_boxes: int) -> Image.Image:
     img = pil.copy()
     draw = ImageDraw.Draw(img)
 
@@ -266,11 +305,6 @@ def _draw_dets(pil: Image.Image, dets: Sequence[Det], title: str, score_thresh: 
         font = ImageFont.load_default()
     except Exception:
         font = None
-
-    pad = 6
-    bar_h = 22
-    draw.rectangle([0, 0, img.width, bar_h], fill=(0, 0, 0))
-    draw.text((pad, 3), title, fill=(255, 255, 255), font=font)
 
     kept = 0
     for d in dets:
@@ -287,22 +321,104 @@ def _draw_dets(pil: Image.Image, dets: Sequence[Det], title: str, score_thresh: 
     return img
 
 
-def _fit_cell(img: Image.Image, cell_w: int, cell_h: int) -> Image.Image:
+def _fit_cell(img: Image.Image, cell_w: int, cell_h: int, title: str, subtitle: Optional[str] = None) -> Image.Image:
     canvas = Image.new("RGB", (cell_w, cell_h), (20, 20, 20))
-    fitted = ImageOps.contain(img, (cell_w, cell_h))
+
+    header_h = max(26, int(cell_h * 0.06))
+    inner_w = cell_w
+    inner_h = max(1, cell_h - header_h)
+
+    fitted = _contain_resize(img, inner_w, inner_h)
     x = (cell_w - fitted.width) // 2
-    y = (cell_h - fitted.height) // 2
+    y = header_h + (inner_h - fitted.height) // 2
     canvas.paste(fitted, (x, y))
+
+    draw = ImageDraw.Draw(canvas)
+    draw.rectangle([0, 0, cell_w, header_h], fill=(0, 0, 0))
+    try:
+        font = ImageFont.load_default()
+    except Exception:
+        font = None
+
+    pad = 6
+    draw.text((pad, 3), str(title), fill=(255, 255, 255), font=font)
+    if subtitle:
+        draw.text((pad, max(3, header_h - 14)), str(subtitle), fill=(200, 200, 200), font=font)
     return canvas
 
 
-def _make_single_row_grid(cells: List[Image.Image], cell_w: int, cell_h: int) -> Image.Image:
+def _make_single_row_grid(
+    cells: List[Image.Image],
+    cell_w: int,
+    cell_h: int,
+    titles: Sequence[str],
+    subtitles: Optional[Sequence[Optional[str]]] = None,
+) -> Image.Image:
     n_cols = len(cells)
     grid = Image.new("RGB", (n_cols * cell_w, cell_h), (0, 0, 0))
     for c, img in enumerate(cells):
-        cell = _fit_cell(img, cell_w, cell_h)
+        st = None
+        if subtitles is not None and c < len(subtitles):
+            st = subtitles[c]
+        t = titles[c] if c < len(titles) else f"col_{c}"
+        cell = _fit_cell(img, cell_w, cell_h, title=t, subtitle=st)
         grid.paste(cell, (c * cell_w, 0))
     return grid
+
+
+def _make_grid(
+    cells: List[Image.Image],
+    cell_w: int,
+    cell_h: int,
+    grid_cols: int,
+    grid_rows: int,
+    titles: Sequence[str],
+    subtitles: Optional[Sequence[Optional[str]]] = None,
+) -> Image.Image:
+    cols = int(grid_cols)
+    rows = int(grid_rows)
+    if cols <= 0 or rows <= 0:
+        raise ValueError(f"grid_cols/grid_rows must be > 0, got cols={cols} rows={rows}")
+
+    n_slots = cols * rows
+    if len(cells) > n_slots:
+        raise ValueError(f"Too many cells ({len(cells)}) for grid {rows}x{cols} ({n_slots} slots)")
+
+    # Pad with empty images so layout is stable.
+    if len(cells) < n_slots:
+        empty = Image.new("RGB", (1, 1), (20, 20, 20))
+        cells = list(cells) + [empty] * (n_slots - len(cells))
+
+    grid = Image.new("RGB", (cols * cell_w, rows * cell_h), (0, 0, 0))
+    for i, img in enumerate(cells):
+        r = i // cols
+        c = i % cols
+
+        t = titles[i] if i < len(titles) else f"cell_{i}"
+        st = None
+        if subtitles is not None and i < len(subtitles):
+            st = subtitles[i]
+
+        cell = _fit_cell(img, cell_w, cell_h, title=t, subtitle=st)
+        grid.paste(cell, (c * cell_w, r * cell_h))
+    return grid
+
+
+def _resize_bgr_to_fit(frame_bgr, max_w: Optional[int], max_h: Optional[int]):
+    if frame_bgr is None:
+        return frame_bgr
+    h, w = frame_bgr.shape[:2]
+    if w <= 0 or h <= 0:
+        return frame_bgr
+    if not max_w or not max_h or int(max_w) <= 0 or int(max_h) <= 0:
+        return frame_bgr
+
+    scale = min(float(max_w) / float(w), float(max_h) / float(h), 1.0)
+    if scale >= 0.999:
+        return frame_bgr
+    nw = max(1, int(round(w * scale)))
+    nh = max(1, int(round(h * scale)))
+    return cv2.resize(frame_bgr, (nw, nh), interpolation=cv2.INTER_AREA)
 
 
 def _load_yaml_config(path: Optional[str]) -> dict:
@@ -324,6 +440,13 @@ def _cfg_get(cfg: dict, keys: Sequence[str], default=None):
     return cur
 
 
+def _coalesce(*vals):
+    for v in vals:
+        if v is not None:
+            return v
+    return None
+
+
 def main():
     p = argparse.ArgumentParser(
         description=(
@@ -331,9 +454,16 @@ def main():
             "Ideal para rodar em servidor via SSH e assistir localmente (baixando o MP4)."
         )
     )
-    p.add_argument("--config", default=None, help="Opcional: config.yaml do projeto (para ler model.name/num_classes/params)")
-    p.add_argument("--run-dir", required=True)
-    p.add_argument("--video", required=True, help="Caminho para o vídeo de entrada (mp4/avi/etc)")
+    p.add_argument(
+        "--config",
+        default=None,
+        help=(
+            "Opcional: YAML. Lê model.* e também (se presentes) video_grid.* "
+            "(run_dir/video/out/gui/no_mp4/thresholds/WBF/grid)."
+        ),
+    )
+    p.add_argument("--run-dir", required=False, default=None, help="Pasta do run (best.pth ou fold_*/best.pth)")
+    p.add_argument("--video", required=False, default=None, help="Caminho para o vídeo de entrada (mp4/avi/etc)")
     p.add_argument("--out", default=None, help="Caminho para o mp4 de saída (obrigatório a menos que --no-mp4)")
 
     p.add_argument("--gui", action="store_true", help="Mostra janela com o grid (para rodar localmente com desktop)")
@@ -342,25 +472,88 @@ def main():
     p.add_argument("--model", default=None, help="Sobrescreve model.name do config.yaml")
     p.add_argument("--num-classes", type=int, default=None, help="Sobrescreve model.num_classes do config.yaml")
 
-    p.add_argument("--score-thresh", type=float, default=0.4)
-    p.add_argument("--max-boxes", type=int, default=50)
+    p.add_argument("--score-thresh", type=float, default=None)
+    p.add_argument("--max-boxes", type=int, default=None)
 
-    p.add_argument("--every", type=int, default=5, help="Processa 1 frame a cada N frames (stride)")
-    p.add_argument("--max-frames", type=int, default=300, help="Limite de frames processados")
-    p.add_argument("--out-fps", type=float, default=10.0)
+    p.add_argument("--every", type=int, default=None, help="Processa 1 frame a cada N frames (stride)")
+    p.add_argument("--max-frames", type=int, default=None, help="Limite de frames processados")
+    p.add_argument("--out-fps", type=float, default=None)
 
     # WBF
-    p.add_argument("--wbf-iou", type=float, default=0.55)
-    p.add_argument("--wbf-skip-box-thr", type=float, default=0.0)
-    p.add_argument("--wbf-conf", choices=["avg", "max"], default="avg")
+    p.add_argument("--wbf-iou", type=float, default=None)
+    p.add_argument("--wbf-skip-box-thr", type=float, default=None)
+    p.add_argument("--wbf-conf", choices=["avg", "max"], default=None)
     p.add_argument("--wbf-weights", type=float, nargs="*", default=None)
 
     # Grid
-    p.add_argument("--cell", type=int, default=540)
+    p.add_argument("--cell", type=int, default=None)
+    p.add_argument("--grid-cols", type=int, default=None, help="Número de colunas do grid")
+    p.add_argument("--grid-rows", type=int, default=None, help="Número de linhas do grid")
+    p.add_argument("--out-w", type=int, default=None, help="Largura (px) do canvas final/MP4 (ex: 1920)")
+    p.add_argument("--out-h", type=int, default=None, help="Altura (px) do canvas final/MP4 (ex: 1080)")
+    p.add_argument("--gui-max-w", type=int, default=None, help="Largura máxima (px) para o grid no --gui (só display)")
+    p.add_argument("--gui-max-h", type=int, default=None, help="Altura máxima (px) para o grid no --gui (só display)")
 
     args = p.parse_args()
 
     cfg = _load_yaml_config(args.config)
+
+    # Optional script-specific section in YAML
+    vcfg = _cfg_get(cfg, ["video_grid"], {})
+    if vcfg is None:
+        vcfg = {}
+    if not isinstance(vcfg, dict):
+        raise SystemExit("config.yaml: video_grid deve ser um dict")
+
+    # Allow run/video/out/gui/no_mp4 to come from YAML when omitted.
+    args.run_dir = _coalesce(args.run_dir, _cfg_get(vcfg, ["run_dir"], None))
+    args.video = _coalesce(args.video, _cfg_get(vcfg, ["video"], None))
+    args.out = _coalesce(args.out, _cfg_get(vcfg, ["out"], None))
+
+    if not args.gui:
+        args.gui = bool(_cfg_get(vcfg, ["gui"], False))
+    if not args.no_mp4:
+        args.no_mp4 = bool(_cfg_get(vcfg, ["no_mp4"], False))
+
+    # Numeric defaults (CLI overrides YAML; YAML overrides hardcoded default)
+    args.score_thresh = float(_coalesce(args.score_thresh, _cfg_get(vcfg, ["score_thresh"], 0.4)))
+    args.max_boxes = int(_coalesce(args.max_boxes, _cfg_get(vcfg, ["max_boxes"], 50)))
+    args.every = int(_coalesce(args.every, _cfg_get(vcfg, ["every"], 5)))
+    args.max_frames = int(_coalesce(args.max_frames, _cfg_get(vcfg, ["max_frames"], 300)))
+    args.out_fps = float(_coalesce(args.out_fps, _cfg_get(vcfg, ["out_fps"], 10.0)))
+
+    args.wbf_iou = float(_coalesce(args.wbf_iou, _cfg_get(vcfg, ["wbf"], {}).get("iou", 0.55)))
+    args.wbf_skip_box_thr = float(
+        _coalesce(args.wbf_skip_box_thr, _cfg_get(vcfg, ["wbf"], {}).get("skip_box_thr", 0.0))
+    )
+    args.wbf_conf = str(_coalesce(args.wbf_conf, _cfg_get(vcfg, ["wbf"], {}).get("conf_type", "avg")))
+    if args.wbf_weights is None:
+        w = _cfg_get(vcfg, ["wbf"], {}).get("weights", None)
+        if w is not None:
+            if not isinstance(w, list):
+                raise SystemExit("config.yaml: video_grid.wbf.weights deve ser uma lista de floats")
+            args.wbf_weights = [float(x) for x in w]
+
+    args.cell = int(_coalesce(args.cell, _cfg_get(vcfg, ["grid"], {}).get("cell", 540)))
+
+    grid_cfg = _cfg_get(vcfg, ["grid"], {})
+    if grid_cfg is None:
+        grid_cfg = {}
+    if not isinstance(grid_cfg, dict):
+        raise SystemExit("config.yaml: video_grid.grid deve ser um dict")
+
+    args.grid_cols = int(_coalesce(args.grid_cols, grid_cfg.get("cols", 0)))
+    args.grid_rows = int(_coalesce(args.grid_rows, grid_cfg.get("rows", 0)))
+
+    args.out_w = _coalesce(args.out_w, _cfg_get(vcfg, ["out_w"], None), _cfg_get(vcfg, ["output"], {}).get("w", None))
+    args.out_h = _coalesce(args.out_h, _cfg_get(vcfg, ["out_h"], None), _cfg_get(vcfg, ["output"], {}).get("h", None))
+    if args.out_w is not None:
+        args.out_w = int(args.out_w)
+    if args.out_h is not None:
+        args.out_h = int(args.out_h)
+
+    args.gui_max_w = int(_coalesce(args.gui_max_w, _cfg_get(vcfg, ["gui_max_w"], 1600)))
+    args.gui_max_h = int(_coalesce(args.gui_max_h, _cfg_get(vcfg, ["gui_max_h"], 900)))
 
     model_name = args.model or _cfg_get(cfg, ["model", "name"], "fasterrcnn_resnet50_fpn_v2")
     num_classes = args.num_classes or int(_cfg_get(cfg, ["model", "num_classes"], 2))
@@ -373,6 +566,10 @@ def main():
     if args.no_mp4 and args.out is not None:
         # allow passing --out but ignore it
         args.out = None
+    if not args.run_dir:
+        raise SystemExit("Você precisa passar --run-dir (ou definir video_grid.run_dir no YAML)")
+    if not args.video:
+        raise SystemExit("Você precisa passar --video (ou definir video_grid.video no YAML)")
     if not args.no_mp4 and not args.out:
         raise SystemExit("Você precisa passar --out (ou então usar --no-mp4)")
 
@@ -380,6 +577,11 @@ def main():
         # Basic headless guard: imshow will fail without a display.
         if os.environ.get("DISPLAY") is None and os.environ.get("WAYLAND_DISPLAY") is None:
             raise SystemExit("--gui requer um ambiente com display (rodar localmente). No servidor headless, gere MP4.")
+
+        try:
+            cv2.namedWindow("ensemble_grid", cv2.WINDOW_NORMAL)
+        except Exception:
+            pass
 
     ckpts = _find_fold_checkpoints(args.run_dir)
     if args.wbf_weights is not None and len(args.wbf_weights) not in (0, len(ckpts)):
@@ -402,10 +604,43 @@ def main():
     weights = args.wbf_weights if args.wbf_weights is not None and len(args.wbf_weights) else None
     col_names = [n for n, _ in models] + ["ensemble_wbf"]
 
-    # Determine output video size
+    subtitles: List[Optional[str]] = []
+    if weights is None:
+        for _ in models:
+            subtitles.append(None)
+    else:
+        for i in range(len(models)):
+            subtitles.append(f"w={float(weights[i]):.2f}")
+    subtitles.append(f"iou={float(args.wbf_iou):.2f} conf={str(args.wbf_conf)}")
+
+    # Determine output video size + cell size
     cell = int(args.cell)
-    out_w = len(col_names) * cell
-    out_h = cell
+    n_views = len(col_names)
+
+    if int(args.grid_cols) > 0 and int(args.grid_rows) > 0:
+        grid_cols = int(args.grid_cols)
+        grid_rows = int(args.grid_rows)
+    elif int(args.grid_cols) > 0:
+        grid_cols = int(args.grid_cols)
+        grid_rows = (n_views + grid_cols - 1) // grid_cols
+    else:
+        # Backward compatible default: single row
+        grid_cols = n_views
+        grid_rows = 1
+
+    if grid_cols <= 0 or grid_rows <= 0:
+        raise SystemExit("grid inválido: defina video_grid.grid.cols/rows (ou use --grid-cols/--grid-rows)")
+
+    if args.out_w is not None and args.out_h is not None and int(args.out_w) > 0 and int(args.out_h) > 0:
+        out_w = int(args.out_w)
+        out_h = int(args.out_h)
+        cell_w = max(1, out_w // grid_cols)
+        cell_h = max(1, out_h // grid_rows)
+    else:
+        cell_w = cell
+        cell_h = cell
+        out_w = grid_cols * cell_w
+        out_h = grid_rows * cell_h
 
     writer = None
     if not args.no_mp4:
@@ -437,7 +672,7 @@ def main():
         for fold_name, model in models:
             dets = _predict(model, img_t, score_thresh=float(args.score_thresh))
             per_model_dets.append(dets)
-            per_model_imgs.append(_draw_dets(pil, dets, fold_name, float(args.score_thresh), int(args.max_boxes)))
+            per_model_imgs.append(_draw_dets(pil, dets, float(args.score_thresh), int(args.max_boxes)))
 
         dets_wbf = _wbf(
             per_model=per_model_dets,
@@ -447,16 +682,33 @@ def main():
             skip_box_thr=float(args.wbf_skip_box_thr),
             conf_type=str(args.wbf_conf),
         )
-        img_wbf = _draw_dets(pil, dets_wbf, "ensemble_wbf", float(args.score_thresh), int(args.max_boxes))
+        img_wbf = _draw_dets(pil, dets_wbf, float(args.score_thresh), int(args.max_boxes))
 
-        grid = _make_single_row_grid(per_model_imgs + [img_wbf], cell_w=cell, cell_h=cell)
+        grid = _make_grid(
+            per_model_imgs + [img_wbf],
+            cell_w=cell_w,
+            cell_h=cell_h,
+            grid_cols=grid_cols,
+            grid_rows=grid_rows,
+            titles=col_names,
+            subtitles=subtitles,
+        )
+
+        if grid.size != (out_w, out_h):
+            canvas = Image.new("RGB", (out_w, out_h), (0, 0, 0))
+            gx, gy = grid.size
+            ox = max(0, (out_w - gx) // 2)
+            oy = max(0, (out_h - gy) // 2)
+            canvas.paste(grid, (ox, oy))
+            grid = canvas
         out_frame_bgr = _pil_rgb_to_cv2_bgr(grid)
 
         if writer is not None:
             writer.write(out_frame_bgr)
 
         if args.gui:
-            cv2.imshow("ensemble_grid", out_frame_bgr)
+            show_bgr = _resize_bgr_to_fit(out_frame_bgr, args.gui_max_w, args.gui_max_h)
+            cv2.imshow("ensemble_grid", show_bgr)
             key = cv2.waitKey(1) & 0xFF
             if key in (27, ord("q")):
                 break
@@ -490,6 +742,12 @@ def main():
             "num_classes": int(num_classes),
             "gui": bool(args.gui),
             "no_mp4": bool(args.no_mp4),
+            "gui_max_w": int(args.gui_max_w),
+            "gui_max_h": int(args.gui_max_h),
+            "out_w": int(out_w),
+            "out_h": int(out_h),
+            "grid_cols": int(grid_cols),
+            "grid_rows": int(grid_rows),
         }
     )
 

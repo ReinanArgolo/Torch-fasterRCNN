@@ -15,7 +15,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from dataset import COCODetectionDataset, collate_fn
-from transforms import build_sample_transform, build_val_sample_transform
+from transforms import build_sample_transform
 from utils import build_optimizer, build_scheduler, set_seed
 from modules import get_model
 from modules.trainer import Trainer
@@ -163,7 +163,11 @@ def main():
 
     # Transforms
     train_sample_transform = build_sample_transform(train_cfg.get("transforms", {}))
-    val_sample_transform = build_val_sample_transform(train_cfg.get("transforms", {}))
+    # IMPORTANT:
+    # Do not apply an external resize transform for validation/test datasets.
+    # COCO mAP evaluation uses GT boxes from the original COCO JSON; if we resize in the Dataset,
+    # predictions become relative to the resized image while COCO GT remains original -> AP collapses.
+    val_sample_transform = None
 
     # CV toggle
     cv_enabled = bool(cv_cfg.get("enabled", False))

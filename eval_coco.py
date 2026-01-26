@@ -10,7 +10,6 @@ import yaml
 from dataset import COCODetectionDataset, collate_fn
 from modules import get_model
 from coco_eval import compute_coco_map
-from transforms import build_val_sample_transform
 
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -22,6 +21,8 @@ def main():
     parser.add_argument("--checkpoint", type=str, required=True, help="Path to checkpoint (.pth)")
     parser.add_argument("--project-root", type=str, default=None)
     parser.add_argument("--score-thresh", type=float, default=0.05)
+    parser.add_argument("--images-dir", type=str, default=None, help="Optional: override validation images dir")
+    parser.add_argument("--ann-json", type=str, default=None, help="Optional: override validation COCO annotation json")
     args = parser.parse_args()
 
     with open(args.config, "r") as f:
@@ -32,16 +33,23 @@ def main():
         return p if os.path.isabs(p) else os.path.join(project_root, p)
 
     data_cfg = cfg["data"]
-    val_images = rp(data_cfg["images"]["val_dir"]) if isinstance(data_cfg["images"], dict) else rp(data_cfg.get("val_images", ""))
-    val_ann = rp(data_cfg["annotations"]["val_json"]) if isinstance(data_cfg["annotations"], dict) else rp(data_cfg.get("val_annotations", ""))
+    val_images = (
+        args.images_dir
+        or (rp(data_cfg["images"]["val_dir"]) if isinstance(data_cfg.get("images"), dict) else rp(data_cfg.get("val_images", "")))
+    )
+    val_ann = (
+        args.ann_json
+        or (rp(data_cfg["annotations"]["val_json"]) if isinstance(data_cfg.get("annotations"), dict) else rp(data_cfg.get("val_annotations", "")))
+    )
 
     model_cfg = cfg.get("model", {})
     num_classes = int(model_cfg.get("num_classes", 2))
     model_name = str(model_cfg.get("name", "fasterrcnn_resnet50_fpn_v2"))
     model_params = model_cfg.get("params", {}) if isinstance(model_cfg.get("params", {}), dict) else {}
 
-    val_sample_transform = build_val_sample_transform(cfg.get("training", {}).get("transforms", {}))
-    ds = COCODetectionDataset(val_images, val_ann, sample_transforms=val_sample_transform)
+    # IMPORTANT: do not resize externally for COCO evaluation.
+    # COCOeval uses GT boxes from the original JSON; resizing in the Dataset would mismatch coords.
+    ds = COCODetectionDataset(val_images, val_ann, sample_transforms=None)
     loader = DataLoader(ds, batch_size=2, shuffle=False, num_workers=int(cfg.get("training",{}).get("num_workers", 4)), collate_fn=collate_fn)
 
     model = get_model(model_name, num_classes=num_classes, pretrained=False, **model_params)
