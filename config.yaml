@@ -14,9 +14,19 @@ data:
 
 # Training
 training:
-  epochs: 5
+  epochs: 30
   batch_size: 2
-  lr: 0.005
+  lr: 0.002
+  momentum: 0.9
+  weight_decay: 0.0005
+  lr_step_size: 10
+  lr_gamma: 0.5
+  num_workers: 1
+  seed: 42
+  amp: true
+  sample_vis_count: 4
+  sample_vis_thresh: 0.1
+  eval_map_every: 1  # compute COCO mAP every N epochs (0 to disable)
   transforms:
     resize:
       min_size: 800
@@ -25,6 +35,7 @@ training:
     # Multiscale mais alto para preservar detalhe (objetos pequenos/distantes)
     short_sizes: [800, 896, 1024]
     max_size: 1600
+    # Interferências (água/reflexo/espuma): jitter um pouco mais forte
     color_jitter: { p: 0.7, brightness: 0.25, contrast: 0.25, saturation: 0.25, hue: 0.03 }
     use_iou_crop: false
     min_iou: 0.3

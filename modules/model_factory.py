@@ -12,20 +12,29 @@ def _maybe_set_rpn_topn(model, pre_nms_train=None, pre_nms_test=None, post_nms_t
     if rpn is None:
         return
 
-    def _set_topn(attr: str, train_val, test_val):
+    def _set_topn(base_attr: str, train_val, test_val):
         if train_val is None and test_val is None:
             return
-        current = getattr(rpn, attr, None)
+        # TorchVision stores the values in private dicts and exposes callable methods.
+        # We must update the private dicts: _pre_nms_top_n / _post_nms_top_n
+        private_attr = f"_{base_attr}"
+        current = getattr(rpn, private_attr, None)
         if isinstance(current, dict):
+            new_dict = dict(current)
             if train_val is not None:
-                current["training"] = int(train_val)
+                new_dict["training"] = int(train_val)
             if test_val is not None:
-                current["testing"] = int(test_val)
-            setattr(rpn, attr, current)
+                new_dict["testing"] = int(test_val)
+            setattr(rpn, private_attr, new_dict)
         else:
-            # Fallback: some versions may store as int; set to testing value when provided.
-            if test_val is not None:
-                setattr(rpn, attr, int(test_val))
+            # Construct the expected dict if it's missing or not a dict
+            training_val = int(train_val) if train_val is not None else (
+                current.get("training") if isinstance(current, dict) else 2000
+            )
+            testing_val = int(test_val) if test_val is not None else (
+                current.get("testing") if isinstance(current, dict) else 1000
+            )
+            setattr(rpn, private_attr, {"training": training_val, "testing": testing_val})
 
     _set_topn("pre_nms_top_n", pre_nms_train, pre_nms_test)
     _set_topn("post_nms_top_n", post_nms_train, post_nms_test)
@@ -67,8 +76,11 @@ def get_model(name: str, num_classes: int, pretrained: bool = True, **kwargs):
             weights = torchvision.models.detection.FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT
             # não passe num_classes com weights; substitua o head depois
             model = torchvision.models.detection.fasterrcnn_resnet50_fpn_v2(
-                weights=weights, weights_backbone=None, rpn_anchor_generator=rpn_anchor_generator
+                weights=weights, weights_backbone=None
             )
+            # Evitar conflito de kwargs duplicados: ajuste o anchor generator pós-criação
+            if rpn_anchor_generator is not None and hasattr(model, "rpn"):
+                model.rpn.anchor_generator = rpn_anchor_generator
             if num_classes is not None and num_classes != 91:
                 model = _replace_head(model, num_classes)
             _maybe_set_rpn_topn(
@@ -86,16 +98,21 @@ def get_model(name: str, num_classes: int, pretrained: bool = True, **kwargs):
             )
             return model
         else:
-            return torchvision.models.detection.fasterrcnn_resnet50_fpn_v2(
-                weights=None, weights_backbone=None, num_classes=num_classes, rpn_anchor_generator=rpn_anchor_generator
+            model = torchvision.models.detection.fasterrcnn_resnet50_fpn_v2(
+                weights=None, weights_backbone=None, num_classes=num_classes
             )
+            if rpn_anchor_generator is not None and hasattr(model, "rpn"):
+                model.rpn.anchor_generator = rpn_anchor_generator
+            return model
 
     if name == "fasterrcnn_resnet50_fpn":
         if pretrained:
             weights = torchvision.models.detection.FasterRCNN_ResNet50_FPN_Weights.DEFAULT
             model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
-                weights=weights, weights_backbone=None, rpn_anchor_generator=rpn_anchor_generator
+                weights=weights, weights_backbone=None
             )
+            if rpn_anchor_generator is not None and hasattr(model, "rpn"):
+                model.rpn.anchor_generator = rpn_anchor_generator
             if num_classes is not None and num_classes != 91:
                 model = _replace_head(model, num_classes)
             _maybe_set_rpn_topn(
@@ -113,8 +130,11 @@ def get_model(name: str, num_classes: int, pretrained: bool = True, **kwargs):
             )
             return model
         else:
-            return torchvision.models.detection.fasterrcnn_resnet50_fpn(
-                weights=None, weights_backbone=None, num_classes=num_classes, rpn_anchor_generator=rpn_anchor_generator
+            model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
+                weights=None, weights_backbone=None, num_classes=num_classes
             )
+            if rpn_anchor_generator is not None and hasattr(model, "rpn"):
+                model.rpn.anchor_generator = rpn_anchor_generator
+            return model
 
     raise ValueError(f"Unknown model name: {name}")
