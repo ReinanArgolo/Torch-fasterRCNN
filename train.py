@@ -15,7 +15,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from dataset import COCODetectionDataset, collate_fn
-from transforms import build_sample_transform
+from transforms import build_sample_transform, build_val_sample_transform
 from utils import build_optimizer, build_scheduler, set_seed
 from modules import get_model
 from modules.trainer import Trainer
@@ -72,19 +72,34 @@ def _write_coco_subset(base: dict, image_ids_set: set[int], out_path: str):
 def _build_kfold_splits(ann_path: str, n_folds: int, seed: int):
     base = _load_coco(ann_path)
     images = base.get("images", [])
-    img_ids = np.array([im["id"] for im in images], dtype=np.int64)
+    # Group-aware split: keep variants like quadro_0000.jpg and quadro_0000_*.jpg in the same fold.
+    import re
 
+    def _group_key(file_name: str) -> str:
+        base_name = os.path.basename(str(file_name))
+        m = re.match(r"^(quadro_\d{4})", base_name)
+        if m:
+            return m.group(1)
+        # Default: no grouping (unique per file) to avoid unintended leakage.
+        return os.path.splitext(base_name)[0]
+
+    group_to_ids: dict[str, list[int]] = {}
+    for im in images:
+        gid = _group_key(im.get("file_name", ""))
+        group_to_ids.setdefault(gid, []).append(int(im["id"]))
+
+    groups = np.array(list(group_to_ids.keys()))
     rng = np.random.RandomState(seed)
-    perm = rng.permutation(len(img_ids))
+    perm = rng.permutation(len(groups))
     folds_idx = np.array_split(perm, n_folds)
 
     splits = []
     for i in range(n_folds):
-        val_idx = folds_idx[i]
-        train_idx = np.concatenate([folds_idx[j] for j in range(n_folds) if j != i], axis=0) if n_folds > 1 else val_idx
-        train_ids = set(img_ids[train_idx].tolist())
-        val_ids = set(img_ids[val_idx].tolist())
+        val_groups = set(groups[folds_idx[i]].tolist())
+        val_ids = set([img_id for g in val_groups for img_id in group_to_ids[g]])
+        train_ids = set([img_id for g, ids in group_to_ids.items() if g not in val_groups for img_id in ids])
         splits.append((train_ids, val_ids))
+
     return base, splits
 # END ADDITIONS
 
@@ -148,7 +163,7 @@ def main():
 
     # Transforms
     train_sample_transform = build_sample_transform(train_cfg.get("transforms", {}))
-    val_sample_transform = None
+    val_sample_transform = build_val_sample_transform(train_cfg.get("transforms", {}))
 
     # CV toggle
     cv_enabled = bool(cv_cfg.get("enabled", False))
@@ -201,7 +216,8 @@ def main():
             num_classes = int(model_cfg.get("num_classes", 2))
             model_name = str(model_cfg.get("name", "fasterrcnn_resnet50_fpn_v2"))
             pretrained = bool(model_cfg.get("pretrained", True))
-            model = get_model(model_name, num_classes, pretrained=pretrained).to(DEVICE)
+            model_params = model_cfg.get("params", {}) if isinstance(model_cfg.get("params", {}), dict) else {}
+            model = get_model(model_name, num_classes, pretrained=pretrained, **model_params).to(DEVICE)
 
             params = [p for p in model.parameters() if p.requires_grad]
             optimizer = build_optimizer(params, lr=lr, momentum=float(train_cfg.get("momentum", 0.9)), weight_decay=float(train_cfg.get("weight_decay", 5e-4)))
@@ -227,6 +243,17 @@ def main():
             )
 
             trainer.fit(train_loader, val_loader, train_ds, val_ds, start_epoch, epochs)
+
+            # Free GPU/CPU memory between folds
+            try:
+                del trainer, model, optimizer, scheduler, scaler, train_loader, val_loader, train_ds, val_ds
+            except Exception:
+                pass
+            if torch.cuda.is_available():
+                try:
+                    torch.cuda.empty_cache()
+                except Exception:
+                    pass
 
             # Opcional: aqui você pode coletar métricas do fold a partir do trainer, se ele expuser
             # ex.: fold_summaries.append({"fold": fold_idx, "val_mAP": trainer.best_map, "val_loss": trainer.best_val_loss})
@@ -266,7 +293,8 @@ def main():
     num_classes = int(model_cfg.get("num_classes", 2))
     model_name = str(model_cfg.get("name", "fasterrcnn_resnet50_fpn_v2"))
     pretrained = bool(model_cfg.get("pretrained", True))
-    model = get_model(model_name, num_classes, pretrained=pretrained).to(DEVICE)
+    model_params = model_cfg.get("params", {}) if isinstance(model_cfg.get("params", {}), dict) else {}
+    model = get_model(model_name, num_classes, pretrained=pretrained, **model_params).to(DEVICE)
 
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = build_optimizer(params, lr=lr, momentum=float(train_cfg.get("momentum", 0.9)), weight_decay=float(train_cfg.get("weight_decay", 5e-4)))

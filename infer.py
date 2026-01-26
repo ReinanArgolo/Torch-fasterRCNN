@@ -12,8 +12,11 @@ from PIL import Image
 from tqdm import tqdm
 
 from dataset import COCODetectionDataset, collate_fn
-from train import get_model, DEVICE
+from modules import get_model
 from transforms import ResizeShortSide
+
+
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class ImageFolderDataset(Dataset):
@@ -33,7 +36,20 @@ class ImageFolderDataset(Dataset):
         target = {"image_id": torch.tensor([idx], dtype=torch.int64)}
         if self.sample_transform is not None:
             img, target = self.sample_transform(img, target)
-        tensor = torchvision.transforms.functional.to_tensor(img)
+        if isinstance(img, torch.Tensor):
+            tensor = img
+            if tensor.dtype != torch.float32:
+                tensor = tensor.float()
+            if tensor.ndim == 3 and tensor.shape[0] not in (1, 3, 4) and tensor.shape[-1] in (1, 3, 4):
+                tensor = tensor.permute(2, 0, 1).contiguous()
+            if tensor.max().item() > 1.0:
+                tensor = tensor / 255.0
+            if tensor.shape[0] == 1:
+                tensor = tensor.repeat(3, 1, 1)
+            elif tensor.shape[0] == 4:
+                tensor = tensor[:3, ...]
+        else:
+            tensor = torchvision.transforms.functional.to_tensor(img)
         # Use index as image_id for consistency in outputs; file mapping saved separately
         return tensor, target
 

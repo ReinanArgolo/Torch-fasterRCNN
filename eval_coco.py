@@ -8,8 +8,12 @@ from torch.utils.data import DataLoader
 import yaml
 
 from dataset import COCODetectionDataset, collate_fn
-from train import get_model, DEVICE
+from modules import get_model
 from coco_eval import compute_coco_map
+from transforms import build_val_sample_transform
+
+
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def main():
@@ -34,11 +38,13 @@ def main():
     model_cfg = cfg.get("model", {})
     num_classes = int(model_cfg.get("num_classes", 2))
     model_name = str(model_cfg.get("name", "fasterrcnn_resnet50_fpn_v2"))
+    model_params = model_cfg.get("params", {}) if isinstance(model_cfg.get("params", {}), dict) else {}
 
-    ds = COCODetectionDataset(val_images, val_ann)
+    val_sample_transform = build_val_sample_transform(cfg.get("training", {}).get("transforms", {}))
+    ds = COCODetectionDataset(val_images, val_ann, sample_transforms=val_sample_transform)
     loader = DataLoader(ds, batch_size=2, shuffle=False, num_workers=int(cfg.get("training",{}).get("num_workers", 4)), collate_fn=collate_fn)
 
-    model = get_model(model_name, num_classes=num_classes, pretrained=False)
+    model = get_model(model_name, num_classes=num_classes, pretrained=False, **model_params)
     ckpt = torch.load(args.checkpoint, map_location=DEVICE)
     model.load_state_dict(ckpt["model_state"])
     model.to(DEVICE)

@@ -125,3 +125,65 @@ def build_sample_transform(cfg: Dict[str, Any]):
         return img, target
 
     return transform
+
+
+class ResizeShortSide:
+    """Deterministic resize keeping aspect ratio.
+
+    Primarily used for inference utilities.
+    """
+
+    def __init__(self, min_size: int = 800, max_size: int = 1333):
+        self.min_size = int(min_size)
+        self.max_size = int(max_size)
+
+    def __call__(self, img, target: Dict[str, Any]):
+        # Use torchvision v2 Resize when possible; keep it simple and deterministic.
+        try:
+            op = T.Resize(size=(self.min_size,), max_size=self.max_size, antialias=True)
+        except TypeError:
+            try:
+                op = T.Resize(size=(self.min_size,), max_size=self.max_size)
+            except TypeError:
+                op = T.Resize(size=self.min_size)
+
+        # For inference, target may not have boxes; still support if present.
+        img, target = _wrap_tv_tensors(img, target)
+        img, target = op(img, target)
+
+        # Prefer returning PIL if input was PIL, to keep older utilities working.
+        if isinstance(img, TvImage):
+            # Convert tv_tensors.Image -> Tensor, then caller can decide.
+            img = img.as_subclass(torch.Tensor)
+        return img, target
+
+
+def build_val_sample_transform(cfg: Dict[str, Any]):
+    """Deterministic validation transform: resize only (no flip/jitter/crop)."""
+    resize_cfg = cfg.get("resize", {}) if isinstance(cfg, dict) else {}
+    min_size = int(resize_cfg.get("min_size", 800))
+    max_size = int(resize_cfg.get("max_size", cfg.get("max_size", 1333) if isinstance(cfg, dict) else 1333))
+
+    try:
+        resize_op = T.Resize(size=(min_size,), max_size=max_size, antialias=True)
+    except TypeError:
+        try:
+            resize_op = T.Resize(size=(min_size,), max_size=max_size)
+        except TypeError:
+            resize_op = T.Resize(size=min_size)
+
+    pipeline = T.Compose(
+        [
+            T.ToImage(),
+            T.ConvertImageDtype(torch.float32),
+            resize_op,
+        ]
+    )
+
+    def transform(img, target):
+        img, target = _wrap_tv_tensors(img, target)
+        img, target = pipeline(img, target)
+        img, target = _unwrap_tv_tensors(img, target)
+        return img, target
+
+    return transform

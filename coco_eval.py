@@ -69,6 +69,13 @@ def compute_coco_map(
 
     coco_dt = coco_gt.loadRes(results)
     coco_eval = COCOeval(coco_gt, coco_dt, iou_type)
+    # Evaluate only on the image_ids actually present in the dataset/dataloader.
+    # This avoids mAP being penalized by COCO images that are missing on disk and therefore skipped by the Dataset.
+    if hasattr(dataset, "image_ids"):
+        try:
+            coco_eval.params.imgIds = list(dataset.image_ids)
+        except Exception:
+            pass
     coco_eval.evaluate()
     coco_eval.accumulate()
     coco_eval.summarize()

@@ -36,15 +36,26 @@ class COCODetectionDataset(Dataset):
         self.coco = COCO(annotation_json)
         all_img_ids = list(sorted(self.coco.getImgIds()))
 
-        # Index files in directory for robust filename resolution
-        try:
-            self._dir_files = sorted([f for f in os.listdir(self.images_dir) if os.path.isfile(os.path.join(self.images_dir, f))])
-        except FileNotFoundError:
-            self._dir_files = []
+        # Index files recursively for robust filename resolution (supports nested folders)
+        self._file_index_rel_lower: Dict[str, str] = {}
+        self._file_index_basename_lower: Dict[str, List[str]] = {}
+        if os.path.isdir(self.images_dir):
+            for root, _dirs, files in os.walk(self.images_dir):
+                for f in files:
+                    full = os.path.join(root, f)
+                    if not os.path.isfile(full):
+                        continue
+                    rel = os.path.relpath(full, self.images_dir)
+                    rel_norm = rel.replace(os.sep, "/")
+                    self._file_index_rel_lower[rel_norm.lower()] = full
+                    base_lower = os.path.basename(f).lower()
+                    self._file_index_basename_lower.setdefault(base_lower, []).append(full)
 
-        self._dir_set_lower = {f.lower() for f in self._dir_files}
         self._resolved_paths: Dict[int, str] = {}
         resolved_ids: List[int] = []
+
+        missing: List[int] = []
+        ambiguous: List[int] = []
 
         for img_id in all_img_ids:
             info = self.coco.loadImgs([img_id])[0]
@@ -53,45 +64,47 @@ class COCODetectionDataset(Dataset):
             if path is not None:
                 self._resolved_paths[img_id] = path
                 resolved_ids.append(img_id)
-            # If not found, skip this image_id silently (or could log)
+            else:
+                # mark missing/ambiguous for diagnostics
+                if isinstance(getattr(self, "_last_resolve_status", None), str) and self._last_resolve_status == "ambiguous":
+                    ambiguous.append(img_id)
+                else:
+                    missing.append(img_id)
+
+        # Diagnostics summary (helps catch dataset path/JSON mismatches)
+        total = len(all_img_ids)
+        if total > 0:
+            msg = (
+                f"[Dataset] {os.path.basename(annotation_json)} | images_dir={self.images_dir} | "
+                f"total={total} resolved={len(resolved_ids)} missing={len(missing)} ambiguous={len(ambiguous)}"
+            )
+            print(msg)
 
         self.image_ids = resolved_ids
 
     def _resolve_filename(self, file_name: str) -> Optional[str]:
-        # If annotation stores subdirectory (e.g. "val/DSC123.jpg") but images_dir already points to that subdirectory,
-        # use basename for matching.
-        # Try exact path first.
-        exact_path = os.path.join(self.images_dir, file_name)
-        if os.path.exists(exact_path):
-            return exact_path
+        # Reset last status
+        self._last_resolve_status = "missing"
 
-        base_name = os.path.basename(file_name)
-        base_exact = os.path.join(self.images_dir, base_name)
-        if os.path.exists(base_exact):
-            return base_exact
+        # 1) Try exact relative path from JSON (supports subfolders like "val/DSC123.jpg")
+        rel_norm = file_name.replace("\\", "/")
+        full = self._file_index_rel_lower.get(rel_norm.lower())
+        if full is not None:
+            self._last_resolve_status = "ok"
+            return full
 
-        # Case-insensitive exact match
-        lower = base_name.lower()
-        if lower in self._dir_set_lower:
-            # find the original cased filename
-            for f in self._dir_files:
-                if f.lower() == lower:
-                    return os.path.join(self.images_dir, f)
-
-        # Prefix match: handle cases like 'quadro_0000.jpg' vs 'quadro_0000_abcdef.jpg'
-        base, ext = os.path.splitext(base_name)
-        candidates = [f for f in self._dir_files if f.startswith(base + "_") and f.lower().endswith(ext.lower())]
+        # 2) Try basename exact (case-insensitive) anywhere under images_dir
+        base_name = os.path.basename(rel_norm)
+        candidates = self._file_index_basename_lower.get(base_name.lower(), [])
         if len(candidates) == 1:
-            return os.path.join(self.images_dir, candidates[0])
+            self._last_resolve_status = "ok"
+            return candidates[0]
         if len(candidates) > 1:
-            # pick the first deterministically
-            return os.path.join(self.images_dir, sorted(candidates)[0])
+            # Never guess: ambiguous basename across subfolders.
+            self._last_resolve_status = "ambiguous"
+            return None
 
-        # Fallback: any startswith base (without enforcing underscore)
-        candidates = [f for f in self._dir_files if f.startswith(base) and f.lower().endswith(ext.lower())]
-        if candidates:
-            return os.path.join(self.images_dir, sorted(candidates)[0])
-
+        # 3) No prefix matching here on purpose: variants like quadro_0000_*.jpg should be explicit in the COCO JSON.
         return None
 
     def __len__(self) -> int:
