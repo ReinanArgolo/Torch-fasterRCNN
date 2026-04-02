@@ -13,7 +13,6 @@ FILES=(
   "$(dirname "$0")/code_structure.md"
   "$(dirname "$0")/training.md"
   "$(dirname "$0")/cli.md"
-  "$(dirname "$0")/exporting.md"
   "$(dirname "$0")/methodology.md"
   "$(dirname "$0")/augmentation_cv_report.md"
 )

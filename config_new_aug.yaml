@@ -30,11 +30,26 @@ training:
       min_size: 800
       max_size: 1600
     hflip_p: 0.8
-    short_sizes: [800, 896, 1024]
-    max_size: 1600
-    color_jitter: { p: 0.8, brightness: 0.50, contrast: 0.25, saturation: 0.25, hue: 0.03 }
-    use_iou_crop: false
+    use_iou_crop: true
     min_iou: 0.3
+    short_sizes: [640, 720]
+    max_size: 1280
+    color_jitter: { p: 0.8, brightness: 0.35, contrast: 0.35, saturation: 0.25, hue: 0.03 }
+    geom:
+      rotation_deg: 8
+      rotation_p: 0.5
+      perspective: { p: 0.3, distortion_scale: 0.04 }
+      zoom_out: { p: 0.4, side_range: [1.0, 1.6], fill: 0 }
+    photometric:
+      photometric_distort: { p: 0.5 }
+      autocontrast_p: 0.2
+      equalize_p: 0.1
+      gaussian_blur: { p: 0.2, kernel_size: 3, sigma: [0.1, 1.2] }
+      gaussian_noise: { p: 0.2, std: 0.01 }
+    sanitize_boxes:
+      enabled: true
+      min_size: 1.0
+
 
 model:
   name: "fasterrcnn_resnet50_fpn_v2"
@@ -51,7 +66,7 @@ model:
 
 output:
   dir: "outputs"
-  experiment: "fasterrcnn_new_whales"
+  experiment: "fasterrcnn_aug_test"
   save_every: 1
   resume: "resume"
 
@@ -66,5 +81,5 @@ early_stopping:
   prefer_val_mAP: true
 
 cross_validation:
-  enabled: true
+  enabled: false
   folds: 5
