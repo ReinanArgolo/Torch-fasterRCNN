@@ -54,12 +54,7 @@ class Trainer:
             self.optimizer.zero_grad(set_to_none=True)
             if self.scaler is not None:
                 # API atual de AMP
-                device_type = getattr(self.device, "type", "cpu")
-                with torch.amp.autocast(
-                    device_type=device_type,
-                    dtype=torch.float16 if device_type == "cuda" else torch.bfloat16,
-                    enabled=(device_type == "cuda"),
-                ):
+                with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
                     losses = self.model(images, targets)
                     loss = sum(losses.values())
                 self.scaler.scale(loss).backward()
@@ -109,6 +104,7 @@ class Trainer:
             else:
                 mode = "min"
         if mode not in ("min", "max"):
+            print(f"[Trainer] Warning: invalid early_stopping mode '{mode}', defaulting to 'min'.")
             mode = "min"
 
         improved = False
