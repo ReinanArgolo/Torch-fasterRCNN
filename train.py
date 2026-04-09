@@ -116,6 +116,10 @@ def main():
     val_images = rp(project_root, data_cfg["images"].get("val_dir", ""))
     train_ann = rp(project_root, data_cfg["annotations"]["train_json"])
     val_ann = rp(project_root, data_cfg["annotations"].get("val_json", ""))
+    if not os.path.isdir(train_images):
+        raise FileNotFoundError(f"Train images dir not found: {train_images}")
+    if not os.path.isfile(train_ann):
+        raise FileNotFoundError(f"Train annotation JSON not found: {train_ann}")
 
     train_cfg = cfg.get("training", {})
     model_cfg = cfg.get("model", {})
@@ -129,6 +133,7 @@ def main():
     num_workers = args.num_workers or int(train_cfg.get("num_workers", 4))
     seed = args.seed or int(train_cfg.get("seed", 42))
     amp = bool(train_cfg.get("amp", True)) and torch.cuda.is_available()
+    grad_clip_norm = float(train_cfg.get("grad_clip_norm", 1.0))
     eval_map_every = args.eval_map_every if args.eval_map_every is not None else int(train_cfg.get("eval_map_every", 0))
     sample_vis_count = int(train_cfg.get("sample_vis_count", 3))
     sample_vis_thresh = float(train_cfg.get("sample_vis_thresh", 0.1))
@@ -140,10 +145,13 @@ def main():
     print(f"Execução em: {exp_dir}")
 
     set_seed(seed)
+    np.random.seed(seed)
     # Ajustes de backend para melhor throughput quando usando CUDA
     if torch.cuda.is_available():
         try:
-            torch.backends.cudnn.benchmark = True
+            deterministic = bool(train_cfg.get("deterministic", False))
+            torch.backends.cudnn.deterministic = deterministic
+            torch.backends.cudnn.benchmark = not deterministic
         except Exception:
             pass
 
@@ -244,6 +252,7 @@ def main():
                 sample_vis_count=sample_vis_count,
                 exp_dir=fold_dir,
                 sample_vis_thresh=sample_vis_thresh,
+                grad_clip_norm=grad_clip_norm,
             )
 
             trainer.fit(train_loader, val_loader, train_ds, val_ds, start_epoch, epochs)
@@ -309,10 +318,16 @@ def main():
     resume_path = args.resume or out_cfg.get("resume")
     if resume_path and os.path.isfile(resume_path):
         ckpt = torch.load(resume_path, map_location="cpu")
+        if "model_state" not in ckpt:
+            raise KeyError(f"Checkpoint inválido sem 'model_state': {resume_path}")
         model.load_state_dict(ckpt["model_state"])
-        optimizer.load_state_dict(ckpt["optim_state"])
-        scheduler.load_state_dict(ckpt["sched_state"])
-        start_epoch = ckpt["epoch"] + 1
+        if "optim_state" in ckpt:
+            optimizer.load_state_dict(ckpt["optim_state"])
+        if "sched_state" in ckpt:
+            scheduler.load_state_dict(ckpt["sched_state"])
+        if amp and scaler is not None and ckpt.get("scaler_state") is not None:
+            scaler.load_state_dict(ckpt["scaler_state"])
+        start_epoch = int(ckpt.get("epoch", 0)) + 1
         print(f"Resumido de {resume_path} epoch={start_epoch-1}")
 
     trainer = Trainer(
@@ -327,6 +342,7 @@ def main():
         sample_vis_count=sample_vis_count,
         exp_dir=exp_dir,
         sample_vis_thresh=sample_vis_thresh,
+        grad_clip_norm=grad_clip_norm,
     )
 
     trainer.fit(train_loader, val_loader, train_ds, val_ds, start_epoch, epochs)

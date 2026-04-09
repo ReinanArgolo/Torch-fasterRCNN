@@ -1,12 +1,26 @@
-# scripts/quick_infer.py
+import argparse
 import torch
 from PIL import Image
-from torchvision.transforms.functional import to_tensor, to_pil_image
+from torchvision.transforms.functional import to_tensor
 from modules import get_model
 
-model = get_model("fasterrcnn_resnet50_fpn_v2", num_classes=2, pretrained=True).eval().to("cuda" if torch.cuda.is_available() else "cpu")
-img = Image.open("/home/reinanlinux/Documentos/TrainR-cnn/new_whales_rcnn/images/Validation/val/ALGUMA.jpg").convert("RGB")
-x = to_tensor(img).unsqueeze(0).to("cuda" if torch.cuda.is_available() else "cpu")
-with torch.no_grad():
-    out = model(x)[0]
-print("boxes:", out["boxes"].shape, "max score:", float(out["scores"].max().item()) if len(out["scores"]) else None)
+
+def main():
+    parser = argparse.ArgumentParser(description="Quick single-image inference")
+    parser.add_argument("--image", required=True, help="Path to input image")
+    parser.add_argument("--num-classes", type=int, default=2)
+    parser.add_argument("--model", default="fasterrcnn_resnet50_fpn_v2")
+    parser.add_argument("--pretrained", action="store_true")
+    args = parser.parse_args()
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = get_model(args.model, num_classes=args.num_classes, pretrained=bool(args.pretrained)).eval().to(device)
+    img = Image.open(args.image).convert("RGB")
+    x = to_tensor(img).unsqueeze(0).to(device)
+    with torch.no_grad():
+        out = model(x)[0]
+    print("boxes:", out["boxes"].shape, "max score:", float(out["scores"].max().item()) if len(out["scores"]) else None)
+
+
+if __name__ == "__main__":
+    main()

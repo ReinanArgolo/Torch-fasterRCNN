@@ -16,21 +16,30 @@ def plot_and_save(x_epochs, y_values, ylabel, out_file):
     plt.close()
 
 def export_metrics(exp_dir, epochs, train_loss, val_loss, map_vals):
+    def _safe(v):
+        try:
+            x = float(v)
+            if math.isnan(x) or math.isinf(x):
+                return None
+            return x
+        except Exception:
+            return None
+
+    payload = {
+        "epochs": epochs,
+        "train_loss": [_safe(v) for v in train_loss],
+        "val_loss": [_safe(v) for v in val_loss],
+        "map": [_safe(v) for v in map_vals],
+    }
     with open(os.path.join(exp_dir, "metrics.json"), "w") as f:
-        json.dump(
-            {
-                "epochs": epochs,
-                "train_loss": train_loss,
-                "val_loss": val_loss,
-                "map": map_vals,
-            },
-            f,
-            indent=2,
-        )
+        json.dump(payload, f, indent=2)
     with open(os.path.join(exp_dir, "metrics.csv"), "w") as f:
         f.write("epoch,train_loss,val_loss,map\n")
         for e, tl, vl, mp in zip(epochs, train_loss, val_loss, map_vals):
-            f.write(f"{e},{tl},{vl},{mp}\n")
+            stl = _safe(tl)
+            svl = _safe(vl)
+            smp = _safe(mp)
+            f.write(f"{e},{'' if stl is None else stl},{'' if svl is None else svl},{'' if smp is None else smp}\n")
     plot_and_save(epochs, train_loss, "Train Loss", os.path.join(exp_dir, "train_loss.png"))
     if any(not math.isnan(v) for v in val_loss):
         plot_and_save(epochs, val_loss, "Val Loss", os.path.join(exp_dir, "val_loss.png"))

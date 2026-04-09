@@ -119,7 +119,10 @@ class COCODetectionDataset(Dataset):
             # This should not happen if init filtered correctly; raise clear error
             raise FileNotFoundError(f"Image file for id {img_id} not found under {self.images_dir}")
 
-        img = Image.open(path).convert("RGB")
+        try:
+            img = Image.open(path).convert("RGB")
+        except Exception as e:
+            raise RuntimeError(f"Failed to load image '{path}' (image_id={img_id}): {e}") from e
 
         ann_ids = self.coco.getAnnIds(imgIds=[img_id])
         anns = self.coco.loadAnns(ann_ids)

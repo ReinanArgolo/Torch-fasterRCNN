@@ -31,7 +31,10 @@ class ImageFolderDataset(Dataset):
     def __getitem__(self, idx):
         file_name = self.files[idx]
         path = os.path.join(self.images_dir, file_name)
-        img = Image.open(path).convert("RGB")
+        try:
+            img = Image.open(path).convert("RGB")
+        except Exception as e:
+            raise RuntimeError(f"Failed to load image '{path}': {e}") from e
         # To tensor [0,1]
         target = {"image_id": torch.tensor([idx], dtype=torch.int64)}
         if self.sample_transform is not None:
@@ -71,7 +74,17 @@ def main():
         sample_transform = ResizeShortSide(min_size=int(args.resize_min), max_size=int(args.resize_max or 1333))
 
     ds = ImageFolderDataset(args.images, sample_transform=sample_transform)
-    loader = DataLoader(ds, batch_size=1, shuffle=False, collate_fn=collate_fn, num_workers=2)
+    num_workers = 2
+    loader = DataLoader(
+        ds,
+        batch_size=1,
+        shuffle=False,
+        collate_fn=collate_fn,
+        num_workers=num_workers,
+        pin_memory=torch.cuda.is_available(),
+        persistent_workers=num_workers > 0,
+        prefetch_factor=2 if num_workers > 0 else None,
+    )
 
     model = get_model(args.model, num_classes=args.num_classes, pretrained=False)
     ckpt = torch.load(args.checkpoint, map_location=DEVICE)
