@@ -62,6 +62,8 @@ class COCODetectionDataset(Dataset):
 
         missing: List[int] = []
         ambiguous: List[int] = []
+        _missing_fnames: List[str] = []
+        _ambiguous_fnames: List[str] = []
 
         for img_id in all_img_ids:
             info = self.coco.loadImgs([img_id])[0]
@@ -74,8 +76,10 @@ class COCODetectionDataset(Dataset):
                 # mark missing/ambiguous for diagnostics
                 if isinstance(getattr(self, "_last_resolve_status", None), str) and self._last_resolve_status == "ambiguous":
                     ambiguous.append(img_id)
+                    _ambiguous_fnames.append(fname)
                 else:
                     missing.append(img_id)
+                    _missing_fnames.append(fname)
 
         # Diagnostics summary (helps catch dataset path/JSON mismatches)
         total = len(all_img_ids)
@@ -85,6 +89,15 @@ class COCODetectionDataset(Dataset):
                 f"total={total} resolved={len(resolved_ids)} missing={len(missing)} ambiguous={len(ambiguous)}"
             )
             print(msg)
+            _MAX_EXAMPLES = 5
+            if _ambiguous_fnames:
+                examples = _ambiguous_fnames[:_MAX_EXAMPLES]
+                suffix = f" … (+{len(_ambiguous_fnames) - _MAX_EXAMPLES} more)" if len(_ambiguous_fnames) > _MAX_EXAMPLES else ""
+                print(f"  [Dataset] ambiguous (basename found in multiple dirs): {examples}{suffix}")
+            if _missing_fnames:
+                examples = _missing_fnames[:_MAX_EXAMPLES]
+                suffix = f" … (+{len(_missing_fnames) - _MAX_EXAMPLES} more)" if len(_missing_fnames) > _MAX_EXAMPLES else ""
+                print(f"  [Dataset] missing (not found under images_dir): {examples}{suffix}")
 
         self.image_ids = resolved_ids
 
@@ -129,7 +142,32 @@ class COCODetectionDataset(Dataset):
             self._last_resolve_status = "ok"
             return candidates[0]
         if len(candidates) > 1:
-            # Never guess: ambiguous basename across subfolders.
+            # When file_name includes a parent directory (e.g. "dataset_job_14/frame_000001.jpg"),
+            # use the directory hint to disambiguate among candidates with the same basename
+            # instead of rejecting them all as ambiguous.
+            intended_parent = os.path.dirname(rel_no_leading_slash)
+            if intended_parent:
+                intended_last_dir = os.path.basename(intended_parent).lower()
+                dir_matched = [
+                    c for c in candidates
+                    if os.path.basename(os.path.dirname(c)).lower() == intended_last_dir
+                ]
+                if len(dir_matched) == 1:
+                    self._last_resolve_status = "ok"
+                    return dir_matched[0]
+                if len(dir_matched) > 1:
+                    # Narrow further: check full relative-path suffix match.
+                    # Both sides are forward-slash normalised for comparison.
+                    intended_suffix = intended_parent.lower() + "/" + base_name.lower()
+                    suffix_matched = [
+                        c for c in dir_matched
+                        if os.path.relpath(c, self.images_dir).replace(os.sep, "/").lower()
+                        .endswith(intended_suffix)
+                    ]
+                    if len(suffix_matched) == 1:
+                        self._last_resolve_status = "ok"
+                        return suffix_matched[0]
+            # Truly ambiguous: cannot determine the correct file.
             self._last_resolve_status = "ambiguous"
             return None
 
