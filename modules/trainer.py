@@ -55,8 +55,11 @@ class Trainer:
             if self.scaler is not None:
                 # API atual de AMP
                 device_type = getattr(self.device, "type", "cpu")
-                amp_dtype = torch.float16 if device_type == "cuda" else torch.bfloat16
-                with torch.amp.autocast(device_type=device_type, dtype=amp_dtype):
+                with torch.amp.autocast(
+                    device_type=device_type,
+                    dtype=torch.float16 if device_type == "cuda" else torch.bfloat16,
+                    enabled=(device_type == "cuda"),
+                ):
                     losses = self.model(images, targets)
                     loss = sum(losses.values())
                 self.scaler.scale(loss).backward()

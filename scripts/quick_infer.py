@@ -14,7 +14,7 @@ def main():
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = get_model(args.model, num_classes=args.num_classes, pretrained=bool(args.pretrained)).eval().to(device)
+    model = get_model(args.model, num_classes=args.num_classes, pretrained=args.pretrained).eval().to(device)
     img = Image.open(args.image).convert("RGB")
     x = to_tensor(img).unsqueeze(0).to(device)
     with torch.no_grad():

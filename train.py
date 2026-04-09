@@ -325,7 +325,7 @@ def main():
             optimizer.load_state_dict(ckpt["optim_state"])
         if "sched_state" in ckpt:
             scheduler.load_state_dict(ckpt["sched_state"])
-        if amp and scaler is not None and ckpt.get("scaler_state") is not None:
+        if amp and scaler is not None and "scaler_state" in ckpt and ckpt["scaler_state"] is not None:
             scaler.load_state_dict(ckpt["scaler_state"])
         start_epoch = int(ckpt.get("epoch", 0)) + 1
         print(f"Resumido de {resume_path} epoch={start_epoch-1}")
