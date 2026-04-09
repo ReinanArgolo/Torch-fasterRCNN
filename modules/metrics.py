@@ -32,7 +32,7 @@ def export_metrics(exp_dir, epochs, train_loss, val_loss, map_vals):
         "map": [_safe(v) for v in map_vals],
     }
     def _csv_val(v):
-        return "" if v is None else v
+        return "" if v is None else str(v)
 
     with open(os.path.join(exp_dir, "metrics.json"), "w") as f:
         json.dump(payload, f, indent=2)

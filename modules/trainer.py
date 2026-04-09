@@ -75,7 +75,9 @@ class Trainer:
         return meter.avg
 
     def _evaluate_loss(self, loader):
-        self.model.eval()
+        # Torchvision detection models compute training losses only in train() mode.
+        # We keep no_grad() to avoid gradient accumulation during validation.
+        self.model.train()
         meter = AverageMeter("val_loss")
         pbar = tqdm(loader, desc="[val_loss]", leave=False)
         with torch.no_grad():
