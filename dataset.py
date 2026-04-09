@@ -48,6 +48,12 @@ class COCODetectionDataset(Dataset):
                     rel = os.path.relpath(full, self.images_dir)
                     rel_norm = rel.replace(os.sep, "/")
                     self._file_index_rel_lower[rel_norm.lower()] = full
+                    rel_key = self._normalize_rel_key(rel_norm)
+                    if rel_key:
+                        rel_key_lower = rel_key.lower()
+                        existing = self._file_index_rel_lower.get(rel_key_lower)
+                        if existing is None or os.path.normcase(os.path.abspath(existing)) == os.path.normcase(os.path.abspath(full)):
+                            self._file_index_rel_lower[rel_key_lower] = full
                     base_lower = os.path.basename(f).lower()
                     self._file_index_basename_lower.setdefault(base_lower, []).append(full)
 
@@ -86,15 +92,38 @@ class COCODetectionDataset(Dataset):
         # Reset last status
         self._last_resolve_status = "missing"
 
-        # 1) Try exact relative path from JSON (supports subfolders like "val/DSC123.jpg")
-        rel_norm = file_name.replace("\\", "/")
-        full = self._file_index_rel_lower.get(rel_norm.lower())
+        # 1) Try direct path joining images_dir + file_name (supports subfolders from COCO JSON).
+        rel_norm = str(file_name).replace("\\", "/").strip()
+        rel_key = self._normalize_rel_key(rel_norm)
+        rel_candidates = [rel_norm] if rel_norm else []
+        if rel_key and rel_key not in rel_candidates:
+            rel_candidates.append(rel_key)
+        rel_no_leading_slash = rel_norm.lstrip("/")
+        if rel_no_leading_slash and rel_no_leading_slash != rel_norm:
+            rel_candidates.append(rel_no_leading_slash)
+
+        images_root_real = os.path.realpath(self.images_dir)
+        for rel_candidate in rel_candidates:
+            joined = os.path.normpath(os.path.join(self.images_dir, rel_candidate))
+            joined_real = os.path.realpath(joined)
+            try:
+                if os.path.commonpath([images_root_real, joined_real]) != images_root_real:
+                    continue
+            except ValueError:
+                continue
+            if os.path.isfile(joined_real):
+                self._last_resolve_status = "ok"
+                return joined_real
+
+        # 2) Try indexed relative path (case-insensitive)
+        full = self._file_index_rel_lower.get(rel_key.lower()) if rel_key else None
         if full is not None:
             self._last_resolve_status = "ok"
             return full
 
-        # 2) Try basename exact (case-insensitive) anywhere under images_dir
-        base_name = os.path.basename(rel_norm)
+        # 3) Try basename exact (case-insensitive) anywhere under images_dir
+        basename_source = rel_key if rel_key else rel_no_leading_slash
+        base_name = os.path.basename(basename_source)
         candidates = self._file_index_basename_lower.get(base_name.lower(), [])
         if len(candidates) == 1:
             self._last_resolve_status = "ok"
@@ -104,8 +133,22 @@ class COCODetectionDataset(Dataset):
             self._last_resolve_status = "ambiguous"
             return None
 
-        # 3) No prefix matching here on purpose: variants like quadro_0000_*.jpg should be explicit in the COCO JSON.
+        # 4) No prefix matching here on purpose: variants like quadro_0000_*.jpg should be explicit in the COCO JSON.
         return None
+
+    @staticmethod
+    def _normalize_rel_key(file_name: str) -> str:
+        rel = str(file_name).replace("\\", "/").strip()
+        while rel.startswith("./"):
+            rel = rel[2:]
+        rel = rel.lstrip("/")
+        if not rel:
+            return ""
+        norm = os.path.normpath(rel).replace("\\", "/")
+        parts = [p for p in norm.split("/") if p]
+        if any(p == ".." for p in parts):
+            return ""
+        return "" if norm in ("", ".") else norm
 
     def __len__(self) -> int:
         return len(self.image_ids)
