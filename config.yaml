@@ -3,19 +3,19 @@
 project_root: "."
 data:
   images:
-    train_dir: "datasets/images/Train"
-    val_dir: "datasets/images/Validation"
-    test: "datasets/images/test"
+    train_dir: "/data04/home/ppgmc/rlargolo/Dataset/dataset_splits/train/"
+    val_dir: "/data04/home/ppgmc/rlargolo/Dataset/dataset_splits/val/"
+    test: "/data04/home/ppgmc/rlargolo/Dataset/dataset_splits/test/"
   annotations:
-    train_json: "datasets/annotations/instances_Train.json"
-    val_json: "datasets/annotations/instances_Validation.json"
-    test_json: "datasets/annotations/test"
+    train_json: "/data04/home/ppgmc/rlargolo/Dataset/dataset_splits/train/annotations/instances.json"
+    val_json: "/data04/home/ppgmc/rlargolo/Dataset/dataset_splits/val/annotations/instances.json"
+    test_json: "/data04/home/ppgmc/rlargolo/Dataset/dataset_splits/test/annotations/instances.json"
 
 
 # Training
 training:
   epochs: 30
-  batch_size: 6
+  batch_size: 4
   lr: 0.003
   momentum: 0.9
   weight_decay: 0.0005
@@ -33,7 +33,7 @@ training:
       max_size: 1600
     hflip_p: 0.5
     # Multiscale mais alto para preservar detalhe (objetos pequenos/distantes)
-    short_sizes: [800, 896, 1024]
+    short_sizes: [800, 896]
     max_size: 1600
     # Interferências (água/reflexo/espuma): jitter um pouco mais forte
     color_jitter: { p: 0.7, brightness: 0.25, contrast: 0.25, saturation: 0.25, hue: 0.03 }
@@ -88,5 +88,5 @@ early_stopping:
   prefer_val_mAP: true
 
 cross_validation:
-  enabled: true     # habilita CV
+  enabled: false     # habilita CV
   folds: 5          # número de folds
