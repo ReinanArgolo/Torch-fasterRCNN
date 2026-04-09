@@ -54,7 +54,7 @@ class Trainer:
             self.optimizer.zero_grad(set_to_none=True)
             if self.scaler is not None:
                 # API atual de AMP
-                device_type = "cuda" if str(self.device).startswith("cuda") else "cpu"
+                device_type = getattr(self.device, "type", "cpu")
                 amp_dtype = torch.float16 if device_type == "cuda" else torch.bfloat16
                 with torch.amp.autocast(device_type=device_type, dtype=amp_dtype):
                     losses = self.model(images, targets)

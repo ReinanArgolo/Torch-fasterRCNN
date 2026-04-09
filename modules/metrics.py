@@ -22,7 +22,7 @@ def export_metrics(exp_dir, epochs, train_loss, val_loss, map_vals):
             if math.isnan(x) or math.isinf(x):
                 return None
             return x
-        except Exception:
+        except (TypeError, ValueError, OverflowError):
             return None
 
     payload = {
