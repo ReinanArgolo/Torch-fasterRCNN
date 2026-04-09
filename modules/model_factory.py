@@ -1,5 +1,7 @@
 import torchvision
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+from torchvision.models.detection import FasterRCNN
+from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
 from torchvision.models.detection.rpn import AnchorGenerator
 
 def _replace_head(model, num_classes: int):
@@ -136,5 +138,26 @@ def get_model(name: str, num_classes: int, pretrained: bool = True, **kwargs):
             if rpn_anchor_generator is not None and hasattr(model, "rpn"):
                 model.rpn.anchor_generator = rpn_anchor_generator
             return model
+
+    if name == "fasterrcnn_resnet101_fpn":
+        backbone_weights = torchvision.models.ResNet101_Weights.DEFAULT if pretrained else None
+        backbone = resnet_fpn_backbone("resnet101", weights=backbone_weights)
+        model = FasterRCNN(backbone, num_classes=num_classes)
+        if rpn_anchor_generator is not None and hasattr(model, "rpn"):
+            model.rpn.anchor_generator = rpn_anchor_generator
+        _maybe_set_rpn_topn(
+            model,
+            pre_nms_train=kwargs.get("rpn_pre_nms_top_n_train"),
+            pre_nms_test=kwargs.get("rpn_pre_nms_top_n_test"),
+            post_nms_train=kwargs.get("rpn_post_nms_top_n_train"),
+            post_nms_test=kwargs.get("rpn_post_nms_top_n_test"),
+        )
+        _maybe_set_roi_params(
+            model,
+            box_score_thresh=kwargs.get("box_score_thresh"),
+            box_nms_thresh=kwargs.get("box_nms_thresh"),
+            box_detections_per_img=kwargs.get("box_detections_per_img"),
+        )
+        return model
 
     raise ValueError(f"Unknown model name: {name}")

@@ -16,12 +16,12 @@ data:
 training:
   epochs: 30
   batch_size: 6
-  lr: 0.002
+  lr: 0.003
   momentum: 0.9
   weight_decay: 0.0005
   lr_step_size: 10
   lr_gamma: 0.5
-  num_workers: 4
+  num_workers: 20
   seed: 42
   amp: true
   sample_vis_count: 4
@@ -42,7 +42,7 @@ training:
 
 # Model
 model:
-  name: "fasterrcnn_resnet50_fpn_v2"
+  name: "fasterrcnn_resnet101_fpn"
   pretrained: yes
   num_classes: 2  # background + whale
   # Ajustes opcionais focados em objetos pequenos/muito próximos.
@@ -54,8 +54,8 @@ model:
     # Mais propostas no RPN (pode aumentar custo/VRAM/tempo, mas ajuda em cenas congestionadas)
     rpn_pre_nms_top_n_train: 4000
     rpn_pre_nms_top_n_test: 2000
-    rpn_post_nms_top_n_train: 4000
-    rpn_post_nms_top_n_test: 2000
+    rpn_post_nms_top_n_train: 2000
+    rpn_post_nms_top_n_test: 1000
     # NMS um pouco mais permissivo para não suprimir objetos próximos
     box_nms_thresh: 0.6
     # Permitir mais detecções por imagem (útil quando há muitos objetos)
@@ -73,11 +73,11 @@ early_stopping:
   enabled: true
   # monitor: choose metric to monitor. Recommended: 'val_loss' (default) or 'val_mAP'.
   # The Trainer will also accept legacy names like 'map' or 'mAP' and map them to 'val_mAP'.
-  monitor: "val_loss"
+  monitor: "val_mAP"
   eval_map_every: 1
   # mode is auto-detected from monitor: 'min' for losses, 'max' for mAP-like metrics
   # If you explicitly want to override, set mode: 'min' or 'max'
-  mode: null
+  mode: "max"
   # minimum change to qualify as improvement (default 1e-4)
   min_delta: 0.0001
   # patience in epochs (default 10)
