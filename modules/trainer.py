@@ -23,6 +23,7 @@ class Trainer:
         sample_vis_count=3,
         exp_dir=".",
         sample_vis_thresh=0.1,  # novo
+        grad_clip_norm=1.0,
     ):
         self.model = model
         self.optimizer = optimizer
@@ -35,8 +36,10 @@ class Trainer:
         self.sample_vis_count = sample_vis_count
         self.exp_dir = exp_dir
         self.sample_vis_thresh = sample_vis_thresh
+        self.grad_clip_norm = float(grad_clip_norm) if grad_clip_norm is not None else 0.0
         self.best_val = float("inf")
         self.best_map = -float("inf")
+        self.best_metric = None
         self.epochs_no_improve = 0
         # path where we'll keep the best checkpoint for early stopping restoration
         self.best_ckpt_path = os.path.join(self.exp_dir, "best.pth")
@@ -55,18 +58,25 @@ class Trainer:
                     losses = self.model(images, targets)
                     loss = sum(losses.values())
                 self.scaler.scale(loss).backward()
+                if self.grad_clip_norm > 0:
+                    self.scaler.unscale_(self.optimizer)
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.grad_clip_norm)
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
             else:
                 losses = self.model(images, targets)
                 loss = sum(losses.values())
                 loss.backward()
+                if self.grad_clip_norm > 0:
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.grad_clip_norm)
                 self.optimizer.step()
             meter.update(loss.item(), n=len(images))
             pbar.set_postfix({"loss": f"{meter.avg:.4f}"})
         return meter.avg
 
     def _evaluate_loss(self, loader):
+        # Torchvision detection models compute training losses only in train() mode.
+        # We keep no_grad() to avoid gradient accumulation during validation.
         self.model.train()
         meter = AverageMeter("val_loss")
         pbar = tqdm(loader, desc="[val_loss]", leave=False)
@@ -95,19 +105,25 @@ class Trainer:
                 mode = "max"
             else:
                 mode = "min"
+        if mode not in ("min", "max"):
+            print(f"[Trainer] Warning: invalid early_stopping mode '{mode}', defaulting to 'min'.")
+            mode = "min"
+
         improved = False
-        # choose comparison based on mode
-        if mode == "min":
-            if epoch_metric < (self.best_val - min_delta):
-                self.best_val = epoch_metric
-                improved = True
+        if self.best_metric is None:
+            improved = True
+        elif mode == "min":
+            improved = epoch_metric < (self.best_metric - min_delta)
         else:
-            if epoch_metric > (self.best_map + min_delta):
-                self.best_map = epoch_metric
-                improved = True
+            improved = epoch_metric > (self.best_metric + min_delta)
 
         # Save best checkpoint when improved
         if improved:
+            self.best_metric = float(epoch_metric)
+            if "map" in str(monitor_key).lower():
+                self.best_map = float(epoch_metric)
+            else:
+                self.best_val = float(epoch_metric)
             # always save model state and optimizer/scheduler state to best_ckpt_path
             save_checkpoint(
                 {
@@ -115,8 +131,10 @@ class Trainer:
                     "model_state": self.model.state_dict(),
                     "optim_state": self.optimizer.state_dict(),
                     "sched_state": self.scheduler.state_dict(),
+                    "scaler_state": self.scaler.state_dict() if self.scaler is not None else None,
                     "best_val": self.best_val,
                     "best_map": self.best_map,
+                    "best_metric": self.best_metric,
                 },
                 self.best_ckpt_path,
             )
@@ -128,23 +146,35 @@ class Trainer:
         if self.epochs_no_improve >= patience:
             if restore_best and os.path.exists(self.best_ckpt_path):
                 try:
+                    restore_step = "load_checkpoint"
                     ckpt = torch.load(self.best_ckpt_path, map_location="cpu")
                     if "model_state" in ckpt:
+                        restore_step = "model_state"
                         self.model.load_state_dict(ckpt["model_state"], strict=False)
                     if "optim_state" in ckpt and self.optimizer is not None:
                         try:
+                            restore_step = "optim_state"
                             self.optimizer.load_state_dict(ckpt["optim_state"])
                         except Exception:
                             # optimizer state may be incompatible; ignore if so
                             pass
                     if "sched_state" in ckpt and self.scheduler is not None:
                         try:
+                            restore_step = "sched_state"
                             self.scheduler.load_state_dict(ckpt["sched_state"])
+                        except Exception:
+                            pass
+                    if "scaler_state" in ckpt and self.scaler is not None and ckpt.get("scaler_state") is not None:
+                        try:
+                            restore_step = "scaler_state"
+                            self.scaler.load_state_dict(ckpt["scaler_state"])
                         except Exception:
                             pass
                     print(f"[Trainer] Restored best checkpoint from {self.best_ckpt_path} before stopping.")
                 except Exception as e:
-                    print(f"[Trainer] Failed to restore best checkpoint: {e}")
+                    raise RuntimeError(
+                        f"[Trainer] Failed to restore best checkpoint at step '{restore_step}': {e}"
+                    ) from e
             return True
         return False
 
@@ -212,8 +242,10 @@ class Trainer:
                         "model_state": self.model.state_dict(),
                         "optim_state": self.optimizer.state_dict(),
                         "sched_state": self.scheduler.state_dict(),
+                        "scaler_state": self.scaler.state_dict() if self.scaler is not None else None,
                         "best_val": self.best_val,
                         "best_map": self.best_map,
+                        "best_metric": self.best_metric,
                     },
                     ckpt_path,
                 )

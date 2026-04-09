@@ -65,6 +65,7 @@ def compute_coco_map(
     results = predict_results(model, data_loader, device=device, score_thresh=score_thresh)
 
     if len(results) == 0:
+        print("[COCO Eval] Warning: no predictions were produced above score threshold.")
         return 0.0, 0.0, 0.0
 
     coco_dt = coco_gt.loadRes(results)

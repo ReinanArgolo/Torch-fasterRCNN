@@ -50,7 +50,18 @@ def main():
     # IMPORTANT: do not resize externally for COCO evaluation.
     # COCOeval uses GT boxes from the original JSON; resizing in the Dataset would mismatch coords.
     ds = COCODetectionDataset(val_images, val_ann, sample_transforms=None)
-    loader = DataLoader(ds, batch_size=2, shuffle=False, num_workers=int(cfg.get("training",{}).get("num_workers", 4)), collate_fn=collate_fn)
+    num_workers = int(cfg.get("training", {}).get("num_workers", 4))
+    batch_size = int(cfg.get("training", {}).get("batch_size", 2))
+    loader = DataLoader(
+        ds,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        collate_fn=collate_fn,
+        pin_memory=torch.cuda.is_available(),
+        persistent_workers=num_workers > 0,
+        prefetch_factor=2 if num_workers > 0 else None,
+    )
 
     model = get_model(model_name, num_classes=num_classes, pretrained=False, **model_params)
     ckpt = torch.load(args.checkpoint, map_location=DEVICE)
