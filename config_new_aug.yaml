@@ -2,19 +2,19 @@
 project_root: "."
 data:
   images:
-    train_dir: "datasets/images/Train"
-    val_dir: "datasets/images/Validation"
-    test: "datasets/images/test"
+    train_dir: "/data04/home/ppgmc/rlargolo/Dataset/dataset_splits/train/"
+    val_dir: "/data04/home/ppgmc/rlargolo/Dataset/dataset_splits/val/"
+    test: "/data04/home/ppgmc/rlargolo/Dataset/dataset_splits/test/"
   annotations:
-    train_json: "datasets/annotations/instances_Train.json"
-    val_json: "datasets/annotations/instances_Validation.json"
-    test_json: "datasets/annotations/test"
+    train_json: "/data04/home/ppgmc/rlargolo/Dataset/dataset_splits/train/annotations/instances.json"
+    val_json: "/data04/home/ppgmc/rlargolo/Dataset/dataset_splits/val/annotations/instances.json"
+    test_json: "/data04/home/ppgmc/rlargolo/Dataset/dataset_splits/test/annotations/instances.json"
 
 
 training:
   epochs: 30
   batch_size: 4
-  lr: 0.002
+  lr: 0.004
   momentum: 0.9
   weight_decay: 0.0005
   lr_step_size: 10
@@ -26,14 +26,11 @@ training:
   sample_vis_thresh: 0.1
   eval_map_every: 1
   transforms:
-    resize:
-      min_size: 800
-      max_size: 1600
     hflip_p: 0.8
     use_iou_crop: true
     min_iou: 0.3
-    short_sizes: [640, 720]
-    max_size: 1280
+    short_sizes: [640, 800, 1024]
+    max_size: 1333
     color_jitter: { p: 0.8, brightness: 0.35, contrast: 0.35, saturation: 0.25, hue: 0.03 }
     geom:
       rotation_deg: 8
@@ -66,7 +63,7 @@ model:
 
 output:
   dir: "outputs"
-  experiment: "fasterrcnn_aug_test"
+  experiment: "fasterrcnn_newDataset_080426"
   save_every: 1
   resume: "resume"
 
