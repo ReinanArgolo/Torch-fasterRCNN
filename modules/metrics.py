@@ -31,6 +31,9 @@ def export_metrics(exp_dir, epochs, train_loss, val_loss, map_vals):
         "val_loss": [_safe(v) for v in val_loss],
         "map": [_safe(v) for v in map_vals],
     }
+    def _csv_val(v):
+        return "" if v is None else v
+
     with open(os.path.join(exp_dir, "metrics.json"), "w") as f:
         json.dump(payload, f, indent=2)
     with open(os.path.join(exp_dir, "metrics.csv"), "w") as f:
@@ -39,7 +42,7 @@ def export_metrics(exp_dir, epochs, train_loss, val_loss, map_vals):
             stl = _safe(tl)
             svl = _safe(vl)
             smp = _safe(mp)
-            f.write(f"{e},{'' if stl is None else stl},{'' if svl is None else svl},{'' if smp is None else smp}\n")
+            f.write(f"{e},{_csv_val(stl)},{_csv_val(svl)},{_csv_val(smp)}\n")
     plot_and_save(epochs, train_loss, "Train Loss", os.path.join(exp_dir, "train_loss.png"))
     if any(not math.isnan(v) for v in val_loss):
         plot_and_save(epochs, val_loss, "Val Loss", os.path.join(exp_dir, "val_loss.png"))

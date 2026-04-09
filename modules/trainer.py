@@ -148,28 +148,35 @@ class Trainer:
         if self.epochs_no_improve >= patience:
             if restore_best and os.path.exists(self.best_ckpt_path):
                 try:
+                    restore_step = "load_checkpoint"
                     ckpt = torch.load(self.best_ckpt_path, map_location="cpu")
                     if "model_state" in ckpt:
+                        restore_step = "model_state"
                         self.model.load_state_dict(ckpt["model_state"], strict=False)
                     if "optim_state" in ckpt and self.optimizer is not None:
                         try:
+                            restore_step = "optim_state"
                             self.optimizer.load_state_dict(ckpt["optim_state"])
                         except Exception:
                             # optimizer state may be incompatible; ignore if so
                             pass
                     if "sched_state" in ckpt and self.scheduler is not None:
                         try:
+                            restore_step = "sched_state"
                             self.scheduler.load_state_dict(ckpt["sched_state"])
                         except Exception:
                             pass
                     if "scaler_state" in ckpt and self.scaler is not None and ckpt.get("scaler_state") is not None:
                         try:
+                            restore_step = "scaler_state"
                             self.scaler.load_state_dict(ckpt["scaler_state"])
                         except Exception:
                             pass
                     print(f"[Trainer] Restored best checkpoint from {self.best_ckpt_path} before stopping.")
                 except Exception as e:
-                    raise RuntimeError(f"[Trainer] Failed to restore best checkpoint: {e}") from e
+                    raise RuntimeError(
+                        f"[Trainer] Failed to restore best checkpoint at step '{restore_step}': {e}"
+                    ) from e
             return True
         return False
 
