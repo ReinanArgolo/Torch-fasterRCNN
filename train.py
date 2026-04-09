@@ -72,15 +72,23 @@ def _write_coco_subset(base: dict, image_ids_set: set[int], out_path: str):
 def _build_kfold_splits(ann_path: str, n_folds: int, seed: int):
     base = _load_coco(ann_path)
     images = base.get("images", [])
-    # Group-aware split: keep variants like quadro_0000.jpg and quadro_0000_*.jpg in the same fold.
+    # Group-aware split:
+    # 1) if file_name has directories, group by parent directory (job/video id);
+    # 2) fallback to legacy quadro_#### grouping;
+    # 3) last fallback keeps one file per group.
     import re
 
     def _group_key(file_name: str) -> str:
-        base_name = os.path.basename(str(file_name))
+        normalized = str(file_name).replace("\\", "/").strip()
+        parent_dir = os.path.basename(os.path.dirname(normalized))
+        if parent_dir:
+            return parent_dir
+
+        base_name = os.path.basename(normalized)
         m = re.match(r"^(quadro_\d{4})", base_name)
         if m:
             return m.group(1)
-        # Default: no grouping (unique per file) to avoid unintended leakage.
+        # Default fallback: unique per file.
         return os.path.splitext(base_name)[0]
 
     group_to_ids: dict[str, list[int]] = {}
